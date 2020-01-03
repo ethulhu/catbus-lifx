@@ -17,6 +17,12 @@ var (
 	configPath = flag.String("config-path", "", "path to config.json")
 )
 
+const (
+	AtMostOnce byte = iota
+	AtLeastOnce
+	ExactlyOnce
+)
+
 func main() {
 	flag.Parse()
 
@@ -54,15 +60,35 @@ func main() {
 			continue
 		}
 
-		mqttClient.Subscribe(light.TopicPower, 1, setBulbPower(light.Name, bulb))
-		mqttClient.Subscribe(light.TopicHue, 1, setBulbHue(light.Name, bulb))
-		mqttClient.Subscribe(light.TopicSaturation, 1, setBulbSaturation(light.Name, bulb))
-		mqttClient.Subscribe(light.TopicBrightness, 1, setBulbBrightness(light.Name, bulb))
-		mqttClient.Subscribe(light.TopicKelvin, 1, setBulbKelvin(light.Name, bulb))
+		power := "off"
+		if state.Power {
+			power = "on"
+		}
+		mqttClient.Publish(light.TopicPower, AtLeastOnce, true, power)
+		hueDegrees := rescale(MaxUint16, 360, float64(state.Color.Hue))
+		mqttClient.Publish(light.TopicHue, AtLeastOnce, true, strconv.FormatFloat(hueDegrees, 'f', -1, 64))
+		saturationPercent := rescale(MaxUint16, 100, float64(state.Color.Saturation))
+		mqttClient.Publish(light.TopicSaturation, AtLeastOnce, true, strconv.FormatFloat(saturationPercent, 'f', -1, 64))
+		brightnessPercent := rescale(MaxUint16, 100, float64(state.Color.Brightness))
+		mqttClient.Publish(light.TopicBrightness, AtLeastOnce, true, strconv.FormatFloat(brightnessPercent, 'f', -1, 64))
+		mqttClient.Publish(light.TopicKelvin, AtLeastOnce, true, strconv.FormatUint(uint64(state.Color.Kelvin), 10))
+
+		mqttClient.Subscribe(light.TopicPower, AtLeastOnce, setBulbPower(light.Name, bulb))
+		mqttClient.Subscribe(light.TopicHue, AtLeastOnce, setBulbHue(light.Name, bulb))
+		mqttClient.Subscribe(light.TopicSaturation, AtLeastOnce, setBulbSaturation(light.Name, bulb))
+		mqttClient.Subscribe(light.TopicBrightness, AtLeastOnce, setBulbBrightness(light.Name, bulb))
+		mqttClient.Subscribe(light.TopicKelvin, AtLeastOnce, setBulbKelvin(light.Name, bulb))
 	}
 
+	// TODO: have a timer periodically check for out-of-band state changes?
 	for {
 	}
+}
+
+const MaxUint16 = float64(^uint16(0))
+
+func rescale(before, after, value float64) float64 {
+	return (after / before) * value
 }
 
 func setBulbPower(name string, bulb *Bulb) mqtt.MessageHandler {
@@ -91,12 +117,12 @@ func setBulbPower(name string, bulb *Bulb) mqtt.MessageHandler {
 func setBulbHue(name string, bulb *Bulb) mqtt.MessageHandler {
 	return func(_ mqtt.Client, msg mqtt.Message) {
 		state := string(msg.Payload())
-		hueDegrees, err := strconv.ParseUint(state, 10, 16)
+		hueDegrees, err := strconv.ParseFloat(state, 64)
 		if err != nil || hueDegrees > 360 {
 			log.Printf("%v: invalid hue value: %w", err)
 			return
 		}
-		hue := hueDegrees * 182
+		hue := rescale(360, MaxUint16, hueDegrees)
 		err = bulb.SetHue(uint16(hue))
 		if err != nil {
 			log.Printf("%v: failed to set hue value: %w", err)
@@ -107,12 +133,12 @@ func setBulbHue(name string, bulb *Bulb) mqtt.MessageHandler {
 func setBulbSaturation(name string, bulb *Bulb) mqtt.MessageHandler {
 	return func(_ mqtt.Client, msg mqtt.Message) {
 		state := string(msg.Payload())
-		saturationPercent, err := strconv.ParseUint(state, 10, 8)
+		saturationPercent, err := strconv.ParseFloat(state, 64)
 		if err != nil || saturationPercent > 100 {
 			log.Printf("%v: invalid saturation value: %w", err)
 			return
 		}
-		saturation := saturationPercent * 655
+		saturation := rescale(100, MaxUint16, saturationPercent)
 		err = bulb.SetSaturation(uint16(saturation))
 		if err != nil {
 			log.Printf("%v: failed to set saturation value: %w", err)
@@ -123,12 +149,12 @@ func setBulbSaturation(name string, bulb *Bulb) mqtt.MessageHandler {
 func setBulbBrightness(name string, bulb *Bulb) mqtt.MessageHandler {
 	return func(_ mqtt.Client, msg mqtt.Message) {
 		state := string(msg.Payload())
-		brightnessPercent, err := strconv.ParseUint(state, 10, 8)
+		brightnessPercent, err := strconv.ParseFloat(state, 64)
 		if err != nil || brightnessPercent > 100 {
 			log.Printf("%v: invalid brightness value: %w", err)
 			return
 		}
-		brightness := brightnessPercent * 655
+		brightness := rescale(100, MaxUint16, brightnessPercent)
 		err = bulb.SetBrightness(uint16(brightness))
 		if err != nil {
 			log.Printf("%v: failed to set brightness value: %w", err)
