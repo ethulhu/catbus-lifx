@@ -1,11 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"strconv"
 	"time"
@@ -17,24 +15,6 @@ import (
 
 var (
 	configPath = flag.String("config-path", "", "path to config.json")
-)
-
-type (
-	Light struct {
-		Name            string `json:"name"`
-		BulbLabel       string `json:"bulb_label"`
-		TopicPower      string `json:"topic_power"`
-		TopicKelvin     string `json:"topic_kelvin"`
-		TopicSaturation string `json:"topic_saturation"`
-		TopicBrightness string `json:"topic_brightness"`
-		TopicHue        string `json:"topic_hue"`
-	}
-	Config struct {
-		BrokerHost string `json:"broker_host"`
-		BrokerPort uint   `json:"broker_port"`
-
-		Lights []Light `json:"lights"`
-	}
 )
 
 func main() {
@@ -188,25 +168,4 @@ func NewMQTTClient(brokerURI string) mqtt.Client {
 	for !token.WaitTimeout(3 * time.Second) {
 	}
 	return client
-}
-
-func (c *Config) LightForBulb(label string) (Light, bool) {
-	for _, light := range c.Lights {
-		if light.BulbLabel == label {
-			return light, true
-		}
-	}
-	return Light{}, false
-}
-
-func loadConfig(path string) (*Config, error) {
-	src, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-	config := &Config{}
-	if err := json.Unmarshal(src, config); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-	return config, nil
 }
