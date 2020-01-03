@@ -29,14 +29,16 @@ For example,
 	"broker_host": "home-server.local",
 	"broker_port": 1883,
 	"lights": [
-		"name":             "bedroom bedside lamp",
-		"bulb_label":       "Bedside Lamp",
+		{
+			"name":             "bedroom bedside lamp",
+			"bulb_label":       "Bedside Lamp",
 
-		"topic_power":      "home/bedroom/bedside/power",
-		"topic_hue":        "home/bedroom/bedside/hue_degrees",
-		"topic_saturation": "home/bedroom/bedside/saturation_percent",
-		"topic_brightness": "home/bedroom/bedside/saturation_percent",
-		"topic_kelvin":     "home/bedroom/bedside/kelvin"
+			"topic_power":      "home/bedroom/bedside/power",
+			"topic_hue":        "home/bedroom/bedside/hue_degrees",
+			"topic_saturation": "home/bedroom/bedside/saturation_percent",
+			"topic_brightness": "home/bedroom/bedside/saturation_percent",
+			"topic_kelvin":     "home/bedroom/bedside/kelvin"
+		}
 	]
 }
 ```
