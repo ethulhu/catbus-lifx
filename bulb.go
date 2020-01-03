@@ -44,6 +44,36 @@ func (b *Bulb) SetColor(hsbk *golifx.HSBK, duration uint32) error {
 	return err
 }
 
+func (b *Bulb) SetHue(h uint16) error {
+	state, err := b.State()
+	if err != nil {
+		return fmt.Errorf("failed to get bulb state: %w", err)
+	}
+
+	hsbk := state.Color
+	hsbk.Hue = h
+	return b.SetColorState(hsbk, 500)
+}
+func (b *Bulb) SetSaturation(s uint16) error {
+	state, err := b.State()
+	if err != nil {
+		return fmt.Errorf("failed to get bulb state: %w", err)
+	}
+
+	hsbk := state.Color
+	hsbk.Saturation = s
+	return b.SetColorState(hsbk, 500)
+}
+func (b *Bulb) SetBrightness(br uint16) error {
+	state, err := b.State()
+	if err != nil {
+		return fmt.Errorf("failed to get bulb state: %w", err)
+	}
+
+	hsbk := state.Color
+	hsbk.Brightness = br
+	return b.SetColorState(hsbk, 500)
+}
 func (b *Bulb) SetKelvin(k uint16) error {
 	state, err := b.State()
 	if err != nil {

@@ -21,10 +21,13 @@ var (
 
 type (
 	Light struct {
-		Name        string `json:"name"`
-		BulbLabel   string `json:"bulb_label"`
-		TopicPower  string `json:"topic_power"`
-		TopicKelvin string `json:"topic_kelvin"`
+		Name            string `json:"name"`
+		BulbLabel       string `json:"bulb_label"`
+		TopicPower      string `json:"topic_power"`
+		TopicKelvin     string `json:"topic_kelvin"`
+		TopicSaturation string `json:"topic_saturation"`
+		TopicBrightness string `json:"topic_brightness"`
+		TopicHue        string `json:"topic_hue"`
 	}
 	Config struct {
 		BrokerHost string `json:"broker_host"`
@@ -72,6 +75,9 @@ func main() {
 		}
 
 		mqttClient.Subscribe(light.TopicPower, 1, setBulbPower(light.Name, bulb))
+		mqttClient.Subscribe(light.TopicHue, 1, setBulbHue(light.Name, bulb))
+		mqttClient.Subscribe(light.TopicSaturation, 1, setBulbSaturation(light.Name, bulb))
+		mqttClient.Subscribe(light.TopicBrightness, 1, setBulbBrightness(light.Name, bulb))
 		mqttClient.Subscribe(light.TopicKelvin, 1, setBulbKelvin(light.Name, bulb))
 	}
 
@@ -99,6 +105,54 @@ func setBulbPower(name string, bulb *Bulb) mqtt.MessageHandler {
 		}
 		if err != nil {
 			log.Printf("%v: failed to set state: %v", name, err)
+		}
+	}
+}
+func setBulbHue(name string, bulb *Bulb) mqtt.MessageHandler {
+	return func(_ mqtt.Client, msg mqtt.Message) {
+		state := string(msg.Payload())
+		hueDegrees, err := strconv.ParseUint(state, 10, 16)
+		if err != nil || hueDegrees > 360 {
+			log.Printf("%v: invalid hue value: %w", err)
+			return
+		}
+		hue := hueDegrees * 182
+		err = bulb.SetHue(uint16(hue))
+		if err != nil {
+			log.Printf("%v: failed to set hue value: %w", err)
+			return
+		}
+	}
+}
+func setBulbSaturation(name string, bulb *Bulb) mqtt.MessageHandler {
+	return func(_ mqtt.Client, msg mqtt.Message) {
+		state := string(msg.Payload())
+		saturationPercent, err := strconv.ParseUint(state, 10, 8)
+		if err != nil || saturationPercent > 100 {
+			log.Printf("%v: invalid saturation value: %w", err)
+			return
+		}
+		saturation := saturationPercent * 655
+		err = bulb.SetSaturation(uint16(saturation))
+		if err != nil {
+			log.Printf("%v: failed to set saturation value: %w", err)
+			return
+		}
+	}
+}
+func setBulbBrightness(name string, bulb *Bulb) mqtt.MessageHandler {
+	return func(_ mqtt.Client, msg mqtt.Message) {
+		state := string(msg.Payload())
+		brightnessPercent, err := strconv.ParseUint(state, 10, 8)
+		if err != nil || brightnessPercent > 100 {
+			log.Printf("%v: invalid brightness value: %w", err)
+			return
+		}
+		brightness := brightnessPercent * 655
+		err = bulb.SetBrightness(uint16(brightness))
+		if err != nil {
+			log.Printf("%v: failed to set brightness value: %w", err)
+			return
 		}
 	}
 }
