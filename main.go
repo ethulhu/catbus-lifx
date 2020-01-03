@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/2tvenom/golifx"
@@ -20,9 +21,10 @@ var (
 
 type (
 	Light struct {
-		Name       string `json:"name"`
-		BulbLabel  string `json:"bulb_label"`
-		TopicPower string `json:"topic_power"`
+		Name        string `json:"name"`
+		BulbLabel   string `json:"bulb_label"`
+		TopicPower  string `json:"topic_power"`
+		TopicKelvin string `json:"topic_kelvin"`
 	}
 	Config struct {
 		BrokerHost string `json:"broker_host"`
@@ -56,11 +58,11 @@ func main() {
 	log.Print("found bulbs")
 
 	for _, bulb := range bulbs {
-		bulb := bulb
-
-		state, err := bulb.GetColorState()
+		bulb := NewBulb(bulb)
+		state, err := bulb.State()
 		if err != nil {
-			log.Printf("failed to look up bulb: %v", err)
+			log.Printf("o no: %v", err)
+			continue
 		}
 
 		light, ok := config.LightForBulb(state.Label)
@@ -70,13 +72,14 @@ func main() {
 		}
 
 		mqttClient.Subscribe(light.TopicPower, 1, setBulbPower(light.Name, bulb))
+		mqttClient.Subscribe(light.TopicKelvin, 1, setBulbKelvin(light.Name, bulb))
 	}
 
 	for {
 	}
 }
 
-func setBulbPower(name string, bulb *golifx.Bulb) mqtt.MessageHandler {
+func setBulbPower(name string, bulb *Bulb) mqtt.MessageHandler {
 	return func(_ mqtt.Client, msg mqtt.Message) {
 		state := string(msg.Payload())
 		on := false
@@ -96,6 +99,21 @@ func setBulbPower(name string, bulb *golifx.Bulb) mqtt.MessageHandler {
 		}
 		if err != nil {
 			log.Printf("%v: failed to set state: %v", name, err)
+		}
+	}
+}
+func setBulbKelvin(name string, bulb *Bulb) mqtt.MessageHandler {
+	return func(_ mqtt.Client, msg mqtt.Message) {
+		state := string(msg.Payload())
+		k, err := strconv.ParseUint(state, 10, 16)
+		if err != nil {
+			log.Printf("%v: invalid kelvin value: %w", err)
+			return
+		}
+		err = bulb.SetKelvin(uint16(k))
+		if err != nil {
+			log.Printf("%v: failed to set kelvin value: %w", err)
+			return
 		}
 	}
 }
