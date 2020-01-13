@@ -120,13 +120,13 @@ func setBulbHue(name string, bulb *Bulb) mqtt.MessageHandler {
 		state := string(msg.Payload())
 		hueDegrees, err := strconv.ParseFloat(state, 64)
 		if err != nil || hueDegrees > 360 {
-			log.Printf("%v: invalid hue value: %w", err)
+			log.Printf("%v: invalid hue value: %w", state, err)
 			return
 		}
 		hue := rescale(360, MaxUint16, hueDegrees)
 		err = bulb.SetHue(uint16(hue))
 		if err != nil {
-			log.Printf("%v: failed to set hue value: %w", err)
+			log.Printf("%v: failed to set hue value: %w", hue, err)
 			return
 		}
 	}
@@ -136,13 +136,13 @@ func setBulbSaturation(name string, bulb *Bulb) mqtt.MessageHandler {
 		state := string(msg.Payload())
 		saturationPercent, err := strconv.ParseFloat(state, 64)
 		if err != nil || saturationPercent > 100 {
-			log.Printf("%v: invalid saturation value: %w", err)
+			log.Printf("%v: invalid saturation value: %w", state, err)
 			return
 		}
 		saturation := rescale(100, MaxUint16, saturationPercent)
 		err = bulb.SetSaturation(uint16(saturation))
 		if err != nil {
-			log.Printf("%v: failed to set saturation value: %w", err)
+			log.Printf("%v: failed to set saturation value: %w", saturation, err)
 			return
 		}
 	}
@@ -152,13 +152,13 @@ func setBulbBrightness(name string, bulb *Bulb) mqtt.MessageHandler {
 		state := string(msg.Payload())
 		brightnessPercent, err := strconv.ParseFloat(state, 64)
 		if err != nil || brightnessPercent > 100 {
-			log.Printf("%v: invalid brightness value: %w", err)
+			log.Printf("%v: invalid brightness value: %w", state, err)
 			return
 		}
 		brightness := rescale(100, MaxUint16, brightnessPercent)
 		err = bulb.SetBrightness(uint16(brightness))
 		if err != nil {
-			log.Printf("%v: failed to set brightness value: %w", err)
+			log.Printf("%v: failed to set brightness value: %w", brightness, err)
 			return
 		}
 	}
@@ -166,14 +166,14 @@ func setBulbBrightness(name string, bulb *Bulb) mqtt.MessageHandler {
 func setBulbKelvin(name string, bulb *Bulb) mqtt.MessageHandler {
 	return func(_ mqtt.Client, msg mqtt.Message) {
 		state := string(msg.Payload())
-		k, err := strconv.ParseUint(state, 10, 16)
+		kelvin, err := strconv.ParseUint(state, 10, 16)
 		if err != nil {
-			log.Printf("%v: invalid kelvin value: %w", err)
+			log.Printf("%v: invalid kelvin value: %w", state, err)
 			return
 		}
-		err = bulb.SetKelvin(uint16(k))
+		err = bulb.SetKelvin(uint16(kelvin))
 		if err != nil {
-			log.Printf("%v: failed to set kelvin value: %w", err)
+			log.Printf("%v: failed to set kelvin value: %w", kelvin, err)
 			return
 		}
 	}
