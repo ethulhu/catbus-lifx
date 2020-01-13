@@ -81,8 +81,9 @@ func main() {
 	}
 
 	// TODO: have a timer periodically check for out-of-band state changes?
-	for {
-	}
+
+	// block forever.
+	select {}
 }
 
 const MaxUint16 = float64(^uint16(0))
