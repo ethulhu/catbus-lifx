@@ -182,7 +182,7 @@ func setBulbKelvin(name string, bulb *Bulb) mqtt.MessageHandler {
 func NewMQTTClient(brokerURI string) mqtt.Client {
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(brokerURI)
-	opts.SetConnectRetry(true)
+	opts.SetAutoReconnect(true)
 	opts.SetOnConnectHandler(func(_ mqtt.Client) {
 		log.Printf("connected to MQTT broker %s", brokerURI)
 	})
