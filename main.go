@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ethulhu/mqtt-lifx-bridge/lifx"
 	"github.com/ethulhu/mqtt-lifx-bridge/mqtt"
 )
 
@@ -31,18 +30,18 @@ func main() {
 	broker := mqtt.NewClient(config.BrokerHost, config.BrokerPort)
 
 	log.Print("looking up Lifx bulbs")
-	bulbs := lifx.NewCollection()
+	bulbs := newBulbMap()
 	ticker := time.NewTicker(1 * time.Minute)
 	go func() {
 		for {
 			select {
 			case _ = <-ticker.C:
-				if err := bulbs.Refresh(); err != nil {
+				if err := bulbs.refresh(); err != nil {
 					log.Printf("failed to look up bulbs: %v", err)
 				}
 
 				for _, light := range config.Lights {
-					bulb, ok := bulbs.Bulb(light.BulbLabel)
+					bulb, ok := bulbs.bulb(light.BulbLabel)
 					if !ok {
 						log.Printf("%v: failed to find bulb", light.Name)
 						continue
@@ -90,7 +89,7 @@ func rescale(before, after, value float64) float64 {
 	return (after / before) * value
 }
 
-func setBulbPower(bulbs *lifx.Collection, name, label string) mqtt.MessageHandler {
+func setBulbPower(bulbs *bulbMap, name, label string) mqtt.MessageHandler {
 	return func(_ mqtt.Client, msg mqtt.Message) {
 		state := string(msg.Payload())
 		on := false
@@ -104,7 +103,7 @@ func setBulbPower(bulbs *lifx.Collection, name, label string) mqtt.MessageHandle
 			return
 		}
 
-		bulb, ok := bulbs.Bulb(label)
+		bulb, ok := bulbs.bulb(label)
 		if !ok {
 			log.Printf("%v: could not find bulb", name)
 			return
@@ -120,7 +119,7 @@ func setBulbPower(bulbs *lifx.Collection, name, label string) mqtt.MessageHandle
 		}
 	}
 }
-func setBulbHue(bulbs *lifx.Collection, name, label string) mqtt.MessageHandler {
+func setBulbHue(bulbs *bulbMap, name, label string) mqtt.MessageHandler {
 	return func(_ mqtt.Client, msg mqtt.Message) {
 		state := string(msg.Payload())
 		hueDegrees, err := strconv.ParseFloat(state, 64)
@@ -129,7 +128,7 @@ func setBulbHue(bulbs *lifx.Collection, name, label string) mqtt.MessageHandler 
 			return
 		}
 
-		bulb, ok := bulbs.Bulb(label)
+		bulb, ok := bulbs.bulb(label)
 		if !ok {
 			log.Printf("%v: could not find bulb", name)
 			return
@@ -147,7 +146,7 @@ func setBulbHue(bulbs *lifx.Collection, name, label string) mqtt.MessageHandler 
 		}
 	}
 }
-func setBulbSaturation(bulbs *lifx.Collection, name, label string) mqtt.MessageHandler {
+func setBulbSaturation(bulbs *bulbMap, name, label string) mqtt.MessageHandler {
 	return func(_ mqtt.Client, msg mqtt.Message) {
 		state := string(msg.Payload())
 		saturationPercent, err := strconv.ParseFloat(state, 64)
@@ -156,7 +155,7 @@ func setBulbSaturation(bulbs *lifx.Collection, name, label string) mqtt.MessageH
 			return
 		}
 
-		bulb, ok := bulbs.Bulb(label)
+		bulb, ok := bulbs.bulb(label)
 		if !ok {
 			log.Printf("%v: could not find bulb", name)
 			return
@@ -174,7 +173,7 @@ func setBulbSaturation(bulbs *lifx.Collection, name, label string) mqtt.MessageH
 		}
 	}
 }
-func setBulbBrightness(bulbs *lifx.Collection, name, label string) mqtt.MessageHandler {
+func setBulbBrightness(bulbs *bulbMap, name, label string) mqtt.MessageHandler {
 	return func(_ mqtt.Client, msg mqtt.Message) {
 		state := string(msg.Payload())
 		brightnessPercent, err := strconv.ParseFloat(state, 64)
@@ -183,7 +182,7 @@ func setBulbBrightness(bulbs *lifx.Collection, name, label string) mqtt.MessageH
 			return
 		}
 
-		bulb, ok := bulbs.Bulb(label)
+		bulb, ok := bulbs.bulb(label)
 		if !ok {
 			log.Printf("%v: could not find bulb", name)
 			return
@@ -201,7 +200,7 @@ func setBulbBrightness(bulbs *lifx.Collection, name, label string) mqtt.MessageH
 		}
 	}
 }
-func setBulbKelvin(bulbs *lifx.Collection, name, label string) mqtt.MessageHandler {
+func setBulbKelvin(bulbs *bulbMap, name, label string) mqtt.MessageHandler {
 	return func(_ mqtt.Client, msg mqtt.Message) {
 		state := string(msg.Payload())
 		kelvin, err := strconv.ParseUint(state, 10, 16)
@@ -210,7 +209,7 @@ func setBulbKelvin(bulbs *lifx.Collection, name, label string) mqtt.MessageHandl
 			return
 		}
 
-		bulb, ok := bulbs.Bulb(label)
+		bulb, ok := bulbs.bulb(label)
 		if !ok {
 			log.Printf("%v: could not find bulb", name)
 			return
