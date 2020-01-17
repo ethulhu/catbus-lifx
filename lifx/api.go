@@ -10,6 +10,22 @@ import (
 	"time"
 )
 
+const (
+	MinHue        = 0
+	MaxHue        = 359
+	MinSaturation = 0
+	MaxSaturation = 100
+	MinBrightness = 0
+	MaxBrightness = 100
+	MinKelvin     = 2500
+	MaxKelvin     = 9000
+
+	maxUint16       = int(^uint16(0))
+	hueScale        = maxUint16 / MaxHue
+	saturationScale = maxUint16 / MaxSaturation
+	brightnessScale = maxUint16 / MaxBrightness
+)
+
 type (
 	// HSBK is a Lifx color.
 	// All four parts can change the color at once.
@@ -76,25 +92,25 @@ func prettyState(s *state) State {
 		Label: string(bytes.Trim(s.Label[:], "\x00")),
 		Power: Power(s.Power),
 		Color: HSBK{
-			Hue:        int(s.Color.Hue) / 182,
-			Saturation: int(s.Color.Saturation) / 655,
-			Brightness: int(s.Color.Brightness) / 655,
+			Hue:        int(s.Color.Hue) / hueScale,
+			Saturation: int(s.Color.Saturation) / saturationScale,
+			Brightness: int(s.Color.Brightness) / brightnessScale,
 			Kelvin:     int(s.Color.Kelvin),
 		},
 	}
 }
 func uglyHSBK(color HSBK) (hsbk, error) {
 	err := &ErrInvalidColor{}
-	if !(0 <= color.Hue && color.Hue <= 359) {
+	if !(MinHue <= color.Hue && color.Hue <= MaxHue) {
 		err.hue = color.Hue
 	}
-	if !(0 <= color.Saturation && color.Saturation <= 100) {
+	if !(MinSaturation <= color.Saturation && color.Saturation <= MaxSaturation) {
 		err.saturation = color.Saturation
 	}
-	if !(0 <= color.Brightness && color.Brightness <= 100) {
+	if !(MinBrightness <= color.Brightness && color.Brightness <= MaxBrightness) {
 		err.brightness = color.Brightness
 	}
-	if !(2500 <= color.Kelvin && color.Kelvin <= 9000) {
+	if !(MinKelvin <= color.Kelvin && color.Kelvin <= MaxKelvin) {
 		err.kelvin = color.Kelvin
 	}
 	if !err.ok() {
@@ -102,9 +118,9 @@ func uglyHSBK(color HSBK) (hsbk, error) {
 	}
 
 	return hsbk{
-		Hue:        uint16(color.Hue * 182),
-		Saturation: uint16(color.Saturation * 655),
-		Brightness: uint16(color.Brightness * 655),
+		Hue:        uint16(color.Hue * hueScale),
+		Saturation: uint16(color.Saturation * saturationScale),
+		Brightness: uint16(color.Brightness * brightnessScale),
 		Kelvin:     uint16(color.Kelvin),
 	}, nil
 }
