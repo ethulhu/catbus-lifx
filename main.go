@@ -2,25 +2,17 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"io"
 	"log"
 	"strconv"
 	"time"
 
 	"github.com/ethulhu/mqtt-lifx-bridge/lifx"
-
-	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/ethulhu/mqtt-lifx-bridge/mqtt"
 )
 
 var (
 	configPath = flag.String("config-path", "", "path to config.json")
-)
-
-const (
-	AtMostOnce byte = iota
-	AtLeastOnce
-	ExactlyOnce
 )
 
 func main() {
@@ -35,9 +27,8 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	brokerURI := fmt.Sprintf("tcp://%v:%v", config.BrokerHost, config.BrokerPort)
-	log.Printf("connecting to MQTT broker %v", brokerURI)
-	mqttClient := NewMQTTClient(brokerURI)
+	log.Printf("connecting to MQTT broker %v:%v", config.BrokerHost, config.BrokerPort)
+	broker := mqtt.NewClient(config.BrokerHost, config.BrokerPort)
 
 	log.Print("looking up Lifx bulbs")
 	bulbs := lifx.NewCollection()
@@ -66,25 +57,25 @@ func main() {
 					if state.Power {
 						power = "on"
 					}
-					mqttClient.Publish(light.TopicPower, AtLeastOnce, true, power)
+					broker.Publish(light.TopicPower, mqtt.AtLeastOnce, true, power)
 					hueDegrees := rescale(MaxUint16, 360, float64(state.Color.Hue))
-					mqttClient.Publish(light.TopicHue, AtLeastOnce, true, strconv.FormatFloat(hueDegrees, 'f', -1, 64))
+					broker.Publish(light.TopicHue, mqtt.AtLeastOnce, true, strconv.FormatFloat(hueDegrees, 'f', -1, 64))
 					saturationPercent := rescale(MaxUint16, 100, float64(state.Color.Saturation))
-					mqttClient.Publish(light.TopicSaturation, AtLeastOnce, true, strconv.FormatFloat(saturationPercent, 'f', -1, 64))
+					broker.Publish(light.TopicSaturation, mqtt.AtLeastOnce, true, strconv.FormatFloat(saturationPercent, 'f', -1, 64))
 					brightnessPercent := rescale(MaxUint16, 100, float64(state.Color.Brightness))
-					mqttClient.Publish(light.TopicBrightness, AtLeastOnce, true, strconv.FormatFloat(brightnessPercent, 'f', -1, 64))
-					mqttClient.Publish(light.TopicKelvin, AtLeastOnce, true, strconv.FormatUint(uint64(state.Color.Kelvin), 10))
+					broker.Publish(light.TopicBrightness, mqtt.AtLeastOnce, true, strconv.FormatFloat(brightnessPercent, 'f', -1, 64))
+					broker.Publish(light.TopicKelvin, mqtt.AtLeastOnce, true, strconv.FormatUint(uint64(state.Color.Kelvin), 10))
 				}
 			}
 		}
 	}()
 
 	for _, light := range config.Lights {
-		mqttClient.Subscribe(light.TopicPower, AtLeastOnce, setBulbPower(bulbs, light.Name, light.BulbLabel))
-		mqttClient.Subscribe(light.TopicHue, AtLeastOnce, setBulbHue(bulbs, light.Name, light.BulbLabel))
-		mqttClient.Subscribe(light.TopicSaturation, AtLeastOnce, setBulbSaturation(bulbs, light.Name, light.BulbLabel))
-		mqttClient.Subscribe(light.TopicBrightness, AtLeastOnce, setBulbBrightness(bulbs, light.Name, light.BulbLabel))
-		mqttClient.Subscribe(light.TopicKelvin, AtLeastOnce, setBulbKelvin(bulbs, light.Name, light.BulbLabel))
+		broker.Subscribe(light.TopicPower, mqtt.AtLeastOnce, setBulbPower(bulbs, light.Name, light.BulbLabel))
+		broker.Subscribe(light.TopicHue, mqtt.AtLeastOnce, setBulbHue(bulbs, light.Name, light.BulbLabel))
+		broker.Subscribe(light.TopicSaturation, mqtt.AtLeastOnce, setBulbSaturation(bulbs, light.Name, light.BulbLabel))
+		broker.Subscribe(light.TopicBrightness, mqtt.AtLeastOnce, setBulbBrightness(bulbs, light.Name, light.BulbLabel))
+		broker.Subscribe(light.TopicKelvin, mqtt.AtLeastOnce, setBulbKelvin(bulbs, light.Name, light.BulbLabel))
 	}
 
 	// TODO: have a timer periodically check for out-of-band state changes?
@@ -235,22 +226,4 @@ func setBulbKelvin(bulbs *lifx.Collection, name, label string) mqtt.MessageHandl
 			return
 		}
 	}
-}
-
-func NewMQTTClient(brokerURI string) mqtt.Client {
-	opts := mqtt.NewClientOptions()
-	opts.AddBroker(brokerURI)
-	opts.SetAutoReconnect(true)
-	opts.SetOnConnectHandler(func(_ mqtt.Client) {
-		log.Printf("connected to MQTT broker %s", brokerURI)
-	})
-	opts.SetConnectionLostHandler(func(_ mqtt.Client, err error) {
-		log.Printf("disconnected from MQTT broker %s: %v", brokerURI, err)
-	})
-
-	client := mqtt.NewClient(opts)
-	token := client.Connect()
-	for !token.WaitTimeout(3 * time.Second) {
-	}
-	return client
 }
