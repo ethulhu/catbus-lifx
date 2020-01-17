@@ -21,6 +21,10 @@ const (
 	ExactlyOnce
 )
 
+const (
+	Retain = true
+)
+
 // NewClient returns a new Paho MQTT Client for a given host & port
 func NewClient(host string, port uint) Client {
 	brokerURI := fmt.Sprintf("tcp://%v:%v", host, port)
