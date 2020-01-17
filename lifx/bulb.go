@@ -1,86 +1,125 @@
 package lifx
 
 import (
+	"bytes"
+	"context"
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"net"
+	"reflect"
 	"sync"
 	"time"
-
-	"github.com/2tvenom/golifx"
 )
 
-type Bulb struct {
-	*golifx.Bulb
-	sync.Mutex
+type (
+	bulb struct {
+		id   uint64
+		addr net.Addr
 
-	state       *golifx.BulbState
-	lastUpdated time.Time
+		sequence uint8
+		sync.Mutex
+	}
+)
+
+func (b *bulb) String() string {
+	return fmt.Sprintf("{ id: %v addr: %v }", b.id, b.addr)
 }
 
-func NewBulb(bulb *golifx.Bulb) *Bulb {
-	return &Bulb{
-		Bulb: bulb,
+func (b *bulb) State(ctx context.Context) (State, error) {
+	m, err := b.sendAndReceive(ctx, &get{})
+	if err != nil {
+		return State{}, err
 	}
+
+	rawState, ok := m.(*state)
+	if !ok {
+		return State{}, fmt.Errorf("expected State message, got message type %v", reflect.TypeOf(m))
+	}
+	return prettyState(rawState), nil
 }
 
-func (b *Bulb) State() (*golifx.BulbState, error) {
-	b.Lock()
-	defer b.Unlock()
-	if b.state == nil || b.lastUpdated.Before(time.Now().Add(-5*time.Second)) {
-		state, err := b.GetColorState()
-		if err != nil {
-			return nil, err
-		}
-		b.state = state
+func (b *bulb) SetColor(ctx context.Context, hsbk HSBK, d time.Duration) error {
+	color, err := uglyHSBK(hsbk)
+	if err != nil {
+		return err
 	}
-	return b.state, nil
-}
-func (b *Bulb) SetColor(hsbk *golifx.HSBK, duration uint32) error {
-	b.Lock()
-	defer b.Unlock()
-	state, err := b.SetColorStateWithResponse(hsbk, duration)
-	if err == nil {
-		b.state = state
+	req := &setColor{
+		Color:    color,
+		Duration: uint32(d.Milliseconds()),
 	}
+
+	_, err = b.sendAndReceive(ctx, req)
 	return err
 }
 
-func (b *Bulb) SetHue(h uint16) error {
-	state, err := b.State()
-	if err != nil {
-		return fmt.Errorf("failed to get bulb state: %w", err)
+func (b *bulb) SetPower(ctx context.Context, p Power, d time.Duration) error {
+	req := &setPower{
+		Power:    uint16(p),
+		Duration: uint32(d.Milliseconds()),
 	}
-
-	hsbk := state.Color
-	hsbk.Hue = h
-	return b.SetColorState(hsbk, 500)
+	_, err := b.sendAndReceive(ctx, req)
+	return err
 }
-func (b *Bulb) SetSaturation(s uint16) error {
-	state, err := b.State()
+func (b *bulb) sendAndReceive(ctx context.Context, message interface{}) (interface{}, error) {
+	var payload bytes.Buffer
+	_ = binary.Write(&payload, binary.LittleEndian, message)
+
+	hdr := &header{
+		Size:             uint16(headerLength + payload.Len()),
+		Tagged:           false,
+		Source:           source,
+		Target:           b.id,
+		ResponseRequired: true,
+		Sequence:         b.nextSequence(),
+		Type:             typeForMessage(message),
+	}
+	packet := append(hdr.Bytes(), payload.Bytes()...)
+
+	// TODO: provide a proper listenAddr.
+	conn, err := net.ListenUDP("udp", nil)
 	if err != nil {
-		return fmt.Errorf("failed to get bulb state: %w", err)
+		return nil, fmt.Errorf("failed to listen on UDP: %w", err)
+	}
+	defer conn.Close()
+
+	deadline, ok := ctx.Deadline()
+	if ok {
+		conn.SetDeadline(deadline)
 	}
 
-	hsbk := state.Color
-	hsbk.Saturation = s
-	return b.SetColorState(hsbk, 500)
+	if _, err := conn.WriteTo(packet, b.addr); err != nil {
+		return nil, fmt.Errorf("failed to send packet on UDP: %w", err)
+	}
+
+	buf := make([]byte, 256)
+	n, _, err := conn.ReadFromUDP(buf)
+	if err != nil {
+		var netError net.Error
+		if errors.As(err, &netError) && netError.Timeout() {
+			return nil, ErrNoResponse
+		}
+		return nil, fmt.Errorf("failed to read from UDP: %w", err)
+	}
+
+	hdr = &header{}
+	hdr.FromBytes(buf[0:headerLength])
+
+	message = messageForType(hdr.Type)
+	reader := bytes.NewReader(buf[headerLength:n])
+	_ = binary.Read(reader, binary.LittleEndian, message)
+	return message, nil
 }
-func (b *Bulb) SetBrightness(br uint16) error {
-	state, err := b.State()
-	if err != nil {
-		return fmt.Errorf("failed to get bulb state: %w", err)
-	}
 
-	hsbk := state.Color
-	hsbk.Brightness = br
-	return b.SetColorState(hsbk, 500)
-}
-func (b *Bulb) SetKelvin(k uint16) error {
-	state, err := b.State()
-	if err != nil {
-		return fmt.Errorf("failed to get bulb state: %w", err)
-	}
+func (b *bulb) nextSequence() uint8 {
+	b.Lock()
+	defer b.Unlock()
 
-	hsbk := state.Color
-	hsbk.Kelvin = k
-	return b.SetColorState(hsbk, 500)
+	seq := b.sequence
+	if seq == 255 {
+		b.sequence = 0
+	} else {
+		b.sequence++
+	}
+	return seq
 }
