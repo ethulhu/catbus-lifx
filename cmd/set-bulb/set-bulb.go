@@ -34,7 +34,7 @@ func main() {
 		log.Fatalf("power must be on or off, found %v", *power)
 	}
 
-	ctx, _ := context.WithTimeout(context.Background(), *timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	bulbs, err := lifx.Discover(ctx)
 	if err != nil {
 		log.Fatalf("failed to discover bulbs: %v", err)
@@ -42,7 +42,7 @@ func main() {
 
 	var bulb lifx.Bulb
 	var state lifx.State
-	for _, b := range bulbs {
+	for b := range bulbs {
 		ctx, _ := context.WithTimeout(context.Background(), *timeout)
 		s, err := b.State(ctx)
 		if err != nil {
@@ -51,8 +51,10 @@ func main() {
 		if s.Label == *bulbLabel {
 			bulb = b
 			state = s
+			break
 		}
 	}
+	cancel()
 	if bulb == nil {
 		log.Fatalf("could not find bulb %q", *bulbLabel)
 	}

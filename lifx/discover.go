@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"math/rand"
 	"net"
+	"time"
 )
 
 var (
@@ -20,66 +20,73 @@ var (
 )
 
 // Discover discovers Bulbs within a given timeout.
-func Discover(ctx context.Context) ([]Bulb, error) {
+func Discover(ctx context.Context) (<-chan Bulb, error) {
 	packet := broadcastPacket(&getService{})
 
-	// TODO: provide a proper listenAddr.
 	conn, err := net.ListenUDP("udp", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen on UDP: %w", err)
 	}
-	defer conn.Close()
-
-	deadline, ok := ctx.Deadline()
-	if ok {
+	if deadline, ok := ctx.Deadline(); ok {
 		conn.SetDeadline(deadline)
 	}
 
 	if _, err := conn.WriteTo(packet, broadcastAddr); err != nil {
+		conn.Close()
 		return nil, fmt.Errorf("failed to send packet on UDP: %w", err)
 	}
 
-	var bulbs []Bulb
-	bulbIDs := map[uint64]bool{}
-	for {
-		buf := make([]byte, 256)
-		n, addr, err := conn.ReadFromUDP(buf)
-		if err != nil {
-			var netError net.Error
-			if errors.As(err, &netError) && netError.Timeout() {
-				return bulbs, nil
+	bulbs := make(chan Bulb)
+	returned := make(chan struct{})
+
+	go func() {
+		select {
+		case <-returned:
+			// do nothing.
+		case <-ctx.Done():
+			conn.SetDeadline(time.Now())
+		}
+	}()
+
+	go func() {
+		defer conn.Close()
+		defer close(bulbs)
+		defer close(returned)
+
+		bulbIDs := map[uint64]bool{}
+		for {
+			buf := make([]byte, 256)
+			n, addr, err := conn.ReadFromUDP(buf)
+			if err != nil {
+				return
 			}
-			return bulbs, fmt.Errorf("failed to read from UDP: %w", err)
+
+			hdr := &header{}
+			hdr.FromBytes(buf[0:headerLength])
+
+			// If we've already seen it, skip.
+			if bulbIDs[hdr.Target] {
+				continue
+			}
+			bulbIDs[hdr.Target] = true
+
+			message := &stateService{}
+			reader := bytes.NewReader(buf[headerLength:n])
+			_ = binary.Read(reader, binary.LittleEndian, message)
+
+			bulb := &bulb{
+				addr: &net.UDPAddr{
+					IP:   addr.IP,
+					Port: int(message.Port),
+				},
+				id: hdr.Target,
+			}
+
+			bulbs <- bulb
 		}
+	}()
 
-		hdr := &header{}
-		hdr.FromBytes(buf[0:headerLength])
-
-		// If we've already seen it, skip.
-		if bulbIDs[hdr.Target] {
-			continue
-		}
-		bulbIDs[hdr.Target] = true
-
-		message := &stateService{}
-		expectedType := typeForMessage(message)
-		if hdr.Type != expectedType {
-			return bulbs, fmt.Errorf("unexpected message type: expected %v, got %v", expectedType, hdr.Type)
-		}
-
-		reader := bytes.NewReader(buf[headerLength:n])
-		_ = binary.Read(reader, binary.LittleEndian, message)
-
-		bulb := &bulb{
-			addr: &net.UDPAddr{
-				IP:   addr.IP,
-				Port: int(message.Port),
-			},
-			id: hdr.Target,
-		}
-
-		bulbs = append(bulbs, bulb)
-	}
+	return bulbs, nil
 }
 
 func broadcastPacket(message interface{}) []byte {

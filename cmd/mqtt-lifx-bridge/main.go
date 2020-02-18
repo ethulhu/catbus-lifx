@@ -26,12 +26,8 @@ func discoverBulbs(bulbs *sync.Map) {
 	if err != nil {
 		log.Printf("failed to refresh bulb handles: %v", err)
 	}
-	if len(bulbHandles) == 0 {
-		log.Print("found no bulbs")
-	}
 
-	for _, bulb := range bulbHandles {
-		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	for bulb := range bulbHandles {
 		state, err := bulb.State(ctx)
 		if err != nil {
 			log.Printf("failed to read bulb state during discovery: %v", err)
