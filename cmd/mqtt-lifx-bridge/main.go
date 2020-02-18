@@ -74,9 +74,6 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	log.Printf("connecting to MQTT broker %v:%v", config.BrokerHost, config.BrokerPort)
-	broker := mqtt.NewClient(config.BrokerHost, config.BrokerPort)
-
 	var bulbs sync.Map
 
 	discoverBulbs(&bulbs)
@@ -86,103 +83,118 @@ func main() {
 		}
 	}(time.Tick(5 * time.Minute))
 
+	brokerURI := mqtt.URI(config.BrokerHost, config.BrokerPort)
+	brokerOptions := mqtt.NewClientOptions()
+	brokerOptions.AddBroker(brokerURI)
+	brokerOptions.SetAutoReconnect(true)
+	brokerOptions.SetOnConnectHandler(func(broker mqtt.Client) {
+		log.Printf("connected to MQTT broker %s", brokerURI)
+
+		for _, light := range config.Lights {
+			subscribe(broker, &bulbs, light, light.TopicPower, func(ctx context.Context, bulb lifx.Bulb, payload string) error {
+				var power lifx.Power
+				switch payload {
+				case "on":
+					power = lifx.On
+				case "off":
+					power = lifx.Off
+				default:
+					return fmt.Errorf("power must be one of {on, off}, found %v", payload)
+				}
+
+				if err := bulb.SetPower(ctx, power, 500*time.Millisecond); err != nil {
+					return fmt.Errorf("failed to set power: %v", err)
+				}
+				return nil
+			})
+			subscribe(broker, &bulbs, light, light.TopicHue, func(ctx context.Context, bulb lifx.Bulb, payload string) error {
+				hue, err := parseNumber(payload)
+				if err != nil {
+					return fmt.Errorf("hue must be a number, found %v", payload)
+				}
+
+				state, err := bulb.State(ctx)
+				if err != nil {
+					return fmt.Errorf("failed to get bulb state: %w", err)
+				}
+
+				color := state.Color
+				color.Hue = hue
+				if err := bulb.SetColor(ctx, color, 100*time.Millisecond); err != nil {
+					return fmt.Errorf("failed to set hue: %w", err)
+				}
+				return nil
+			})
+			subscribe(broker, &bulbs, light, light.TopicSaturation, func(ctx context.Context, bulb lifx.Bulb, payload string) error {
+				saturation, err := parseNumber(payload)
+				if err != nil {
+					return fmt.Errorf("saturation must be a number, found %v", payload)
+				}
+
+				state, err := bulb.State(ctx)
+				if err != nil {
+					return fmt.Errorf("failed to get bulb state: %w", err)
+				}
+
+				color := state.Color
+				color.Saturation = saturation
+				if err := bulb.SetColor(ctx, color, 100*time.Millisecond); err != nil {
+					return fmt.Errorf("failed to set saturation: %w", err)
+				}
+				return nil
+			})
+			subscribe(broker, &bulbs, light, light.TopicBrightness, func(ctx context.Context, bulb lifx.Bulb, payload string) error {
+				brightness, err := parseNumber(payload)
+				if err != nil {
+					return fmt.Errorf("brightness must be a number, found %v", payload)
+				}
+
+				state, err := bulb.State(ctx)
+				if err != nil {
+					return fmt.Errorf("failed to get bulb state: %w", err)
+				}
+
+				color := state.Color
+				color.Brightness = brightness
+				if err := bulb.SetColor(ctx, color, 100*time.Millisecond); err != nil {
+					return fmt.Errorf("failed to set brightness: %w", err)
+				}
+				return nil
+			})
+			subscribe(broker, &bulbs, light, light.TopicKelvin, func(ctx context.Context, bulb lifx.Bulb, payload string) error {
+				kelvin, err := parseNumber(payload)
+				if err != nil {
+					return fmt.Errorf("kelvin must be a number, found %v", payload)
+				}
+
+				state, err := bulb.State(ctx)
+				if err != nil {
+					return fmt.Errorf("failed to get bulb state: %w", err)
+				}
+
+				color := state.Color
+				color.Kelvin = kelvin
+				if err := bulb.SetColor(ctx, color, 100*time.Millisecond); err != nil {
+					return fmt.Errorf("failed to set kelvin: %w", err)
+				}
+				return nil
+			})
+		}
+	})
+	brokerOptions.SetConnectionLostHandler(func(_ mqtt.Client, err error) {
+		log.Printf("disconnected from MQTT broker %s: %v", brokerURI, err)
+	})
+
+	log.Printf("connecting to MQTT broker %v", brokerURI)
+	broker := mqtt.NewClient(brokerOptions)
+	_ = broker.Connect()
+
 	publishBulbStates(config, broker, &bulbs)
 	go func(c <-chan time.Time) {
 		for _ = range c {
 			publishBulbStates(config, broker, &bulbs)
 		}
 	}(time.Tick(30 * time.Second))
-
-	for _, light := range config.Lights {
-		subscribe(broker, &bulbs, light, light.TopicPower, func(ctx context.Context, bulb lifx.Bulb, payload string) error {
-			var power lifx.Power
-			switch payload {
-			case "on":
-				power = lifx.On
-			case "off":
-				power = lifx.Off
-			default:
-				return fmt.Errorf("power must be one of {on, off}, found %v", payload)
-			}
-
-			if err := bulb.SetPower(ctx, power, 500*time.Millisecond); err != nil {
-				return fmt.Errorf("failed to set power: %v", err)
-			}
-			return nil
-		})
-		subscribe(broker, &bulbs, light, light.TopicHue, func(ctx context.Context, bulb lifx.Bulb, payload string) error {
-			hue, err := parseNumber(payload)
-			if err != nil {
-				return fmt.Errorf("hue must be a number, found %v", payload)
-			}
-
-			state, err := bulb.State(ctx)
-			if err != nil {
-				return fmt.Errorf("failed to get bulb state: %w", err)
-			}
-
-			color := state.Color
-			color.Hue = hue
-			if err := bulb.SetColor(ctx, color, 100*time.Millisecond); err != nil {
-				return fmt.Errorf("failed to set hue: %w", err)
-			}
-			return nil
-		})
-		subscribe(broker, &bulbs, light, light.TopicSaturation, func(ctx context.Context, bulb lifx.Bulb, payload string) error {
-			saturation, err := parseNumber(payload)
-			if err != nil {
-				return fmt.Errorf("saturation must be a number, found %v", payload)
-			}
-
-			state, err := bulb.State(ctx)
-			if err != nil {
-				return fmt.Errorf("failed to get bulb state: %w", err)
-			}
-
-			color := state.Color
-			color.Saturation = saturation
-			if err := bulb.SetColor(ctx, color, 100*time.Millisecond); err != nil {
-				return fmt.Errorf("failed to set saturation: %w", err)
-			}
-			return nil
-		})
-		subscribe(broker, &bulbs, light, light.TopicBrightness, func(ctx context.Context, bulb lifx.Bulb, payload string) error {
-			brightness, err := parseNumber(payload)
-			if err != nil {
-				return fmt.Errorf("brightness must be a number, found %v", payload)
-			}
-
-			state, err := bulb.State(ctx)
-			if err != nil {
-				return fmt.Errorf("failed to get bulb state: %w", err)
-			}
-
-			color := state.Color
-			color.Brightness = brightness
-			if err := bulb.SetColor(ctx, color, 100*time.Millisecond); err != nil {
-				return fmt.Errorf("failed to set brightness: %w", err)
-			}
-			return nil
-		})
-		subscribe(broker, &bulbs, light, light.TopicKelvin, func(ctx context.Context, bulb lifx.Bulb, payload string) error {
-			kelvin, err := parseNumber(payload)
-			if err != nil {
-				return fmt.Errorf("kelvin must be a number, found %v", payload)
-			}
-
-			state, err := bulb.State(ctx)
-			if err != nil {
-				return fmt.Errorf("failed to get bulb state: %w", err)
-			}
-
-			color := state.Color
-			color.Kelvin = kelvin
-			if err := bulb.SetColor(ctx, color, 100*time.Millisecond); err != nil {
-				return fmt.Errorf("failed to set kelvin: %w", err)
-			}
-			return nil
-		})
-	}
 
 	// block forever.
 	select {}
