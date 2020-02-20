@@ -159,8 +159,14 @@ func setHue(bulbs *sync.Map, label string) mqtt.MessageHandler {
 		}
 
 		hue, err := parseNumber(string(msg.Payload()))
-		if err != nil || !(0 <= hue && hue < 359) {
+		if err != nil {
 			return
+		}
+		for hue < 0 {
+			hue += 360
+		}
+		if hue > 359 {
+			hue = hue % 360
 		}
 
 		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
@@ -186,8 +192,14 @@ func setSaturation(bulbs *sync.Map, label string) mqtt.MessageHandler {
 		}
 
 		saturation, err := parseNumber(string(msg.Payload()))
-		if err != nil || !(0 <= saturation && saturation <= 100) {
+		if err != nil {
 			return
+		}
+		if saturation < 0 {
+			saturation = 0
+		}
+		if saturation > 100 {
+			saturation = 100
 		}
 
 		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
@@ -213,8 +225,14 @@ func setBrightness(bulbs *sync.Map, label string) mqtt.MessageHandler {
 		}
 
 		brightness, err := parseNumber(string(msg.Payload()))
-		if err != nil || !(0 <= brightness && brightness <= 100) {
+		if err != nil {
 			return
+		}
+		if brightness < 0 {
+			brightness = 0
+		}
+		if brightness > 100 {
+			brightness = 100
 		}
 
 		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
@@ -240,8 +258,14 @@ func setKelvin(bulbs *sync.Map, label string) mqtt.MessageHandler {
 		}
 
 		kelvin, err := parseNumber(string(msg.Payload()))
-		if err != nil || !(2500 <= kelvin && kelvin <= 9000) {
+		if err != nil {
 			return
+		}
+		if kelvin < 2500 {
+			kelvin = 2500
+		}
+		if kelvin > 9000 {
+			kelvin = 9000
 		}
 
 		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
