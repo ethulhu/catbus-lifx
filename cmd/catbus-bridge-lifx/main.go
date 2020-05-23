@@ -176,7 +176,7 @@ func setHue(bulbs *sync.Map, label string) mqtt.MessageHandler {
 		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 		state, err := bulb.State(ctx)
 		if err != nil {
-			log.Printf("%s: failed to get bulb state: %w", label, err)
+			log.Printf("%s: failed to get bulb state: %v", label, err)
 			return
 		}
 
@@ -184,7 +184,7 @@ func setHue(bulbs *sync.Map, label string) mqtt.MessageHandler {
 		color.Hue = hue
 
 		if err := bulb.SetColor(ctx, color, 100*time.Millisecond); err != nil {
-			log.Printf("%s: failed to set hue: %w", label, err)
+			log.Printf("%s: failed to set hue: %v", label, err)
 		}
 	}
 }
@@ -209,7 +209,7 @@ func setSaturation(bulbs *sync.Map, label string) mqtt.MessageHandler {
 		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 		state, err := bulb.State(ctx)
 		if err != nil {
-			log.Printf("%s: failed to get bulb state: %w", label, err)
+			log.Printf("%s: failed to get bulb state: %v", label, err)
 			return
 		}
 
@@ -217,7 +217,7 @@ func setSaturation(bulbs *sync.Map, label string) mqtt.MessageHandler {
 		color.Saturation = saturation
 
 		if err := bulb.SetColor(ctx, color, 100*time.Millisecond); err != nil {
-			log.Printf("%s: failed to set saturation: %w", label, err)
+			log.Printf("%s: failed to set saturation: %v", label, err)
 		}
 	}
 }
@@ -242,7 +242,7 @@ func setBrightness(bulbs *sync.Map, label string) mqtt.MessageHandler {
 		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 		state, err := bulb.State(ctx)
 		if err != nil {
-			log.Printf("%s: failed to get bulb state: %w", label, err)
+			log.Printf("%s: failed to get bulb state: %v", label, err)
 			return
 		}
 
@@ -250,7 +250,7 @@ func setBrightness(bulbs *sync.Map, label string) mqtt.MessageHandler {
 		color.Brightness = brightness
 
 		if err := bulb.SetColor(ctx, color, 100*time.Millisecond); err != nil {
-			log.Printf("%s: failed to set brightness: %w", label, err)
+			log.Printf("%s: failed to set brightness: %v", label, err)
 		}
 	}
 }
@@ -275,7 +275,7 @@ func setKelvin(bulbs *sync.Map, label string) mqtt.MessageHandler {
 		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 		state, err := bulb.State(ctx)
 		if err != nil {
-			log.Printf("%s: failed to get bulb state: %w", label, err)
+			log.Printf("%s: failed to get bulb state: %v", label, err)
 			return
 		}
 
@@ -283,7 +283,7 @@ func setKelvin(bulbs *sync.Map, label string) mqtt.MessageHandler {
 		color.Kelvin = kelvin
 
 		if err := bulb.SetColor(ctx, color, 100*time.Millisecond); err != nil {
-			log.Printf("%s: failed to set Kelvin: %w", label, err)
+			log.Printf("%s: failed to set Kelvin: %v", label, err)
 		}
 	}
 }
