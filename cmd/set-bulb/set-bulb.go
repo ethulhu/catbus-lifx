@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2020 Ethel Morgan
+//
+// SPDX-License-Identifier: MIT
+
 // Binary set-bulb sets color properties for named Lifx bulbs.
 package main
 

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2020 Ethel Morgan
+//
+// SPDX-License-Identifier: MIT
+
 module github.com/ethulhu/mqtt-lifx-bridge
 
 go 1.13

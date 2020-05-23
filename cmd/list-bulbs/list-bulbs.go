@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2020 Ethel Morgan
+//
+// SPDX-License-Identifier: MIT
+
 // Binary list-bulbs lists Lifx bulbs on the local network.
 package main
 

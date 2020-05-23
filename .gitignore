@@ -1,2 +1,6 @@
+# SPDX-FileCopyrightText: 2020 Ethel Morgan
+#
+# SPDX-License-Identifier: MIT
+
 config.json
 /mqtt-lifx-bridge

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2020 Ethel Morgan
+//
+// SPDX-License-Identifier: MIT
+
 // Package lifx controls Lifx bulbs using the Lifx LAN protocol.
 package lifx
 

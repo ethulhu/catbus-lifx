@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2020 Ethel Morgan
+//
+// SPDX-License-Identifier: MIT
+
 package lifx
 
 import (
@@ -111,4 +115,3 @@ func (h *header) FromBytes(data []byte) error {
 
 	return nil
 }
-

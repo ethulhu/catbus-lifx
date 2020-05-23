@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2020 Ethel Morgan
+
+SPDX-License-Identifier: MIT
+-->
+
 # MQTT-Lifx Bridge
 
 Control [Lifx](https://www.lifx.com/) bulbs using MQTT.
