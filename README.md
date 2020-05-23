@@ -4,9 +4,9 @@ SPDX-FileCopyrightText: 2020 Ethel Morgan
 SPDX-License-Identifier: MIT
 -->
 
-# MQTT-Lifx Bridge
+# Catbus Lifx
 
-Control [Lifx](https://www.lifx.com/) bulbs using MQTT.
+Control [Lifx](https://www.lifx.com/) bulbs using [Catbus](https://ethulhu.co.uk/catbus), a home automation framework built around MQTT.
 
 ## MQTT Topics
 

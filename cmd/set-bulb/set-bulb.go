@@ -11,7 +11,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/ethulhu/mqtt-lifx-bridge/lifx"
+	"github.com/ethulhu/catbus-lifx/lifx"
 )
 
 var (

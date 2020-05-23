@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ethulhu/mqtt-lifx-bridge/lifx"
+	"github.com/ethulhu/catbus-lifx/lifx"
 )
 
 var (

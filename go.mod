@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-module github.com/ethulhu/mqtt-lifx-bridge
+module github.com/ethulhu/catbus-lifx
 
 go 1.13
 

@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethulhu/mqtt-lifx-bridge/lifx"
-	"github.com/ethulhu/mqtt-lifx-bridge/mqtt"
+	"github.com/ethulhu/catbus-lifx/lifx"
+	"github.com/ethulhu/catbus-lifx/mqtt"
 )
 
 var (
