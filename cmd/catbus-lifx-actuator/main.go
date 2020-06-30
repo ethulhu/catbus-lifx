@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: MIT
 
+// Binary catbus-lifx-actuator controls Lifx bulbs via Catbus.
 package main
 
 import (
 	"context"
-	"flag"
 	"log"
 	"strconv"
 	"sync"
@@ -15,133 +15,99 @@ import (
 	"go.eth.moe/catbus"
 	"go.eth.moe/catbus-lifx/config"
 	"go.eth.moe/catbus-lifx/lifx"
+	"go.eth.moe/flag"
 )
 
 var (
-	configPath = flag.String("config-path", "", "path to config.json")
+	configPath = flag.Custom("config-path", "", "path to config.json", flag.RequiredString)
+)
+
+var (
+	bulbsByLabel   = map[string]lifx.Bulb{}
+	bulbsByLabelMu sync.Mutex
 )
 
 func main() {
 	flag.Parse()
 
-	if *configPath == "" {
-		log.Fatal("must set --config-path")
-	}
+	configPath := (*configPath).(string)
 
-	config, err := config.ParseFile(*configPath)
+	config, err := config.ParseFile(configPath)
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	var bulbs sync.Map
-
-	go discoverBulbs(&bulbs)
-	go func(c <-chan time.Time) {
-		for _ = range c {
-			discoverBulbs(&bulbs)
+	go discoverBulbs()
+	go func() {
+		for range time.Tick(30 * time.Second) {
+			discoverBulbs()
 		}
-	}(time.Tick(5 * time.Minute))
+	}()
 
 	broker := catbus.NewClient(config.BrokerURI, catbus.ClientOptions{
 		ConnectHandler: func(broker catbus.Client) {
-			log.Printf("connected to MQTT broker %s", config.BrokerURI)
+			log.Printf("connected to MQTT broker %v", config.BrokerURI)
 
 			for label, bulb := range config.BulbsByLabel {
-				if err := broker.Subscribe(bulb.Topics.Power, setPower(&bulbs, label)); err != nil {
+				if err := broker.Subscribe(bulb.Topics.Power, setPower(label)); err != nil {
 					log.Printf("could not subscribe to power: %v", err)
 				}
-				if err := broker.Subscribe(bulb.Topics.Hue, setHue(&bulbs, label)); err != nil {
+				if err := broker.Subscribe(bulb.Topics.Hue, setHue(label)); err != nil {
 					log.Printf("could not subscribe to hue: %v", err)
 				}
-				if err := broker.Subscribe(bulb.Topics.Saturation, setSaturation(&bulbs, label)); err != nil {
+				if err := broker.Subscribe(bulb.Topics.Saturation, setSaturation(label)); err != nil {
 					log.Printf("could not subscribe to saturation: %v", err)
 				}
-				if err := broker.Subscribe(bulb.Topics.Brightness, setBrightness(&bulbs, label)); err != nil {
+				if err := broker.Subscribe(bulb.Topics.Brightness, setBrightness(label)); err != nil {
 					log.Printf("could not subscribe to brightness: %v", err)
 				}
-				if err := broker.Subscribe(bulb.Topics.Kelvin, setKelvin(&bulbs, label)); err != nil {
+				if err := broker.Subscribe(bulb.Topics.Kelvin, setKelvin(label)); err != nil {
 					log.Printf("could not subscribe to kelvin: %v", err)
 				}
 			}
 		},
 		DisconnectHandler: func(_ catbus.Client, err error) {
-			log.Printf("disconnected from MQTT broker %s: %v", config.BrokerURI, err)
+			log.Printf("disconnected from MQTT broker %v: %v", config.BrokerURI, err)
 		},
 	})
 
-	go publishBulbStates(config, broker, &bulbs)
-	go func(c <-chan time.Time) {
-		for _ = range c {
-			publishBulbStates(config, broker, &bulbs)
-		}
-	}(time.Tick(30 * time.Second))
-
-	log.Printf("connecting to MQTT broker %v", config.BrokerURI)
+	log.Print("connecting to MQTT broker %v", config.BrokerURI)
 	if err := broker.Connect(); err != nil {
-		log.Fatalf("could not connect to MQTT broker: %v", err)
+		log.Fatalf("could not connect to MQTT broker %v: %v", config.BrokerURI, err)
 	}
 }
 
-func findBulb(bulbs *sync.Map, label string) (lifx.Bulb, bool) {
-	maybeBulb, ok := bulbs.Load(label)
-	if !ok {
-		return nil, false
-	}
-	return maybeBulb.(lifx.Bulb), true
-}
-
-func discoverBulbs(bulbs *sync.Map) {
-	log.Print("discovering Lifx bulbs")
-
+func discoverBulbs() {
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-	bulbHandles, err := lifx.Discover(ctx)
+	bulbs, err := lifx.Discover(ctx)
 	if err != nil {
-		log.Printf("failed to refresh bulb handles: %v", err)
+		log.Printf("could not discover bulbs: %v", err)
 		return
 	}
+	log.Print("found bulbs")
 
-	for bulb := range bulbHandles {
-		state, err := bulb.State(ctx)
-		if err != nil {
-			log.Printf("failed to read bulb state during discovery: %v", err)
-			continue
-		}
-		log.Printf("found bulb: %v", state.Label)
+	for bulb := range bulbs {
+		bulb := bulb
+		go func() {
+			ctx := context.Background()
+			state, err := bulb.State(ctx)
+			if err != nil {
+				log.Printf("could not read bulb state: %v", err)
+				return
+			}
+			log.Printf("found bulb: %v", state.Label)
 
-		bulbs.Store(state.Label, bulb)
+			bulbsByLabelMu.Lock()
+			defer bulbsByLabelMu.Unlock()
+			bulbsByLabel[state.Label] = bulb
+		}()
 	}
 }
-
-func publishBulbStates(config *config.Config, broker catbus.Client, bulbs *sync.Map) {
-	for label, bulbConfig := range config.BulbsByLabel {
-		bulb, ok := findBulb(bulbs, label)
-		if !ok {
-			continue
-		}
-
-		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-		state, err := bulb.State(ctx)
-		if err != nil {
-			log.Printf("%v: failed to read bulb state: %v", label, err)
-			continue
-		}
-
-		if err := broker.Publish(bulbConfig.Topics.Power, catbus.Retain, state.Power.String()); err != nil {
-			log.Printf("%v: could not publish power: %v", label, err)
-		}
-		if err := broker.Publish(bulbConfig.Topics.Hue, catbus.Retain, strconv.Itoa(state.Color.Hue)); err != nil {
-			log.Printf("%v: could not publish hue: %v", label, err)
-		}
-		if err := broker.Publish(bulbConfig.Topics.Saturation, catbus.Retain, strconv.Itoa(state.Color.Saturation)); err != nil {
-			log.Printf("%v: could not publish saturation: %v", label, err)
-		}
-		if err := broker.Publish(bulbConfig.Topics.Brightness, catbus.Retain, strconv.Itoa(state.Color.Brightness)); err != nil {
-			log.Printf("%v: could not publish brightness: %v", label, err)
-		}
-		if err := broker.Publish(bulbConfig.Topics.Kelvin, catbus.Retain, strconv.Itoa(state.Color.Kelvin)); err != nil {
-			log.Printf("%v: could not publish kelvin: %v", label, err)
-		}
-	}
+func findBulb(label string) (lifx.Bulb, bool) {
+	bulbsByLabelMu.Lock()
+	defer bulbsByLabelMu.Unlock()
+	bulb, ok := bulbsByLabel[label]
+	return bulb, ok
 }
 
 func parseNumber(raw string) (int, error) {
@@ -149,10 +115,11 @@ func parseNumber(raw string) (int, error) {
 	return int(float), err
 }
 
-func setPower(bulbs *sync.Map, label string) catbus.MessageHandler {
+func setPower(label string) catbus.MessageHandler {
 	return func(_ catbus.Client, msg catbus.Message) {
-		bulb, ok := findBulb(bulbs, label)
+		bulb, ok := findBulb(label)
 		if !ok {
+			log.Printf("could not find bulb: %v", label)
 			return
 		}
 
@@ -172,10 +139,11 @@ func setPower(bulbs *sync.Map, label string) catbus.MessageHandler {
 		}
 	}
 }
-func setHue(bulbs *sync.Map, label string) catbus.MessageHandler {
+func setHue(label string) catbus.MessageHandler {
 	return func(_ catbus.Client, msg catbus.Message) {
-		bulb, ok := findBulb(bulbs, label)
+		bulb, ok := findBulb(label)
 		if !ok {
+			log.Printf("could not find bulb: %v", label)
 			return
 		}
 
@@ -205,10 +173,11 @@ func setHue(bulbs *sync.Map, label string) catbus.MessageHandler {
 		}
 	}
 }
-func setSaturation(bulbs *sync.Map, label string) catbus.MessageHandler {
+func setSaturation(label string) catbus.MessageHandler {
 	return func(_ catbus.Client, msg catbus.Message) {
-		bulb, ok := findBulb(bulbs, label)
+		bulb, ok := findBulb(label)
 		if !ok {
+			log.Printf("could not find bulb: %v", label)
 			return
 		}
 
@@ -238,10 +207,11 @@ func setSaturation(bulbs *sync.Map, label string) catbus.MessageHandler {
 		}
 	}
 }
-func setBrightness(bulbs *sync.Map, label string) catbus.MessageHandler {
+func setBrightness(label string) catbus.MessageHandler {
 	return func(_ catbus.Client, msg catbus.Message) {
-		bulb, ok := findBulb(bulbs, label)
+		bulb, ok := findBulb(label)
 		if !ok {
+			log.Printf("could not find bulb: %v", label)
 			return
 		}
 
@@ -271,10 +241,11 @@ func setBrightness(bulbs *sync.Map, label string) catbus.MessageHandler {
 		}
 	}
 }
-func setKelvin(bulbs *sync.Map, label string) catbus.MessageHandler {
+func setKelvin(label string) catbus.MessageHandler {
 	return func(_ catbus.Client, msg catbus.Message) {
-		bulb, ok := findBulb(bulbs, label)
+		bulb, ok := findBulb(label)
 		if !ok {
+			log.Printf("could not find bulb: %v", label)
 			return
 		}
 
