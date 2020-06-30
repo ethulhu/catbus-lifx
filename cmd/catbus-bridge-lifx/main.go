@@ -7,13 +7,13 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"strconv"
 	"sync"
 	"time"
 
 	"go.eth.moe/catbus"
+	"go.eth.moe/catbus-lifx/config"
 	"go.eth.moe/catbus-lifx/lifx"
 )
 
@@ -28,7 +28,7 @@ func main() {
 		log.Fatal("must set --config-path")
 	}
 
-	config, err := loadConfig(*configPath)
+	config, err := config.ParseFile(*configPath)
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
@@ -42,32 +42,30 @@ func main() {
 		}
 	}(time.Tick(5 * time.Minute))
 
-	brokerURI := fmt.Sprintf("tcp://%v:%v", config.BrokerHost, config.BrokerPort)
-
-	broker := catbus.NewClient(brokerURI, catbus.ClientOptions{
+	broker := catbus.NewClient(config.BrokerURI, catbus.ClientOptions{
 		ConnectHandler: func(broker catbus.Client) {
-			log.Printf("connected to MQTT broker %s", brokerURI)
+			log.Printf("connected to MQTT broker %s", config.BrokerURI)
 
-			for _, light := range config.Lights {
-				if err := broker.Subscribe(light.TopicPower, setPower(&bulbs, light.BulbLabel)); err != nil {
+			for label, bulb := range config.BulbsByLabel {
+				if err := broker.Subscribe(bulb.Topics.Power, setPower(&bulbs, label)); err != nil {
 					log.Printf("could not subscribe to power: %v", err)
 				}
-				if err := broker.Subscribe(light.TopicHue, setHue(&bulbs, light.BulbLabel)); err != nil {
+				if err := broker.Subscribe(bulb.Topics.Hue, setHue(&bulbs, label)); err != nil {
 					log.Printf("could not subscribe to hue: %v", err)
 				}
-				if err := broker.Subscribe(light.TopicSaturation, setSaturation(&bulbs, light.BulbLabel)); err != nil {
+				if err := broker.Subscribe(bulb.Topics.Saturation, setSaturation(&bulbs, label)); err != nil {
 					log.Printf("could not subscribe to saturation: %v", err)
 				}
-				if err := broker.Subscribe(light.TopicBrightness, setBrightness(&bulbs, light.BulbLabel)); err != nil {
+				if err := broker.Subscribe(bulb.Topics.Brightness, setBrightness(&bulbs, label)); err != nil {
 					log.Printf("could not subscribe to brightness: %v", err)
 				}
-				if err := broker.Subscribe(light.TopicKelvin, setKelvin(&bulbs, light.BulbLabel)); err != nil {
+				if err := broker.Subscribe(bulb.Topics.Kelvin, setKelvin(&bulbs, label)); err != nil {
 					log.Printf("could not subscribe to kelvin: %v", err)
 				}
 			}
 		},
 		DisconnectHandler: func(_ catbus.Client, err error) {
-			log.Printf("disconnected from MQTT broker %s: %v", brokerURI, err)
+			log.Printf("disconnected from MQTT broker %s: %v", config.BrokerURI, err)
 		},
 	})
 
@@ -78,7 +76,7 @@ func main() {
 		}
 	}(time.Tick(30 * time.Second))
 
-	log.Printf("connecting to MQTT broker %v", brokerURI)
+	log.Printf("connecting to MQTT broker %v", config.BrokerURI)
 	if err := broker.Connect(); err != nil {
 		log.Fatalf("could not connect to MQTT broker: %v", err)
 	}
@@ -114,9 +112,9 @@ func discoverBulbs(bulbs *sync.Map) {
 	}
 }
 
-func publishBulbStates(config *Config, broker catbus.Client, bulbs *sync.Map) {
-	for _, light := range config.Lights {
-		bulb, ok := findBulb(bulbs, light.BulbLabel)
+func publishBulbStates(config *config.Config, broker catbus.Client, bulbs *sync.Map) {
+	for label, bulbConfig := range config.BulbsByLabel {
+		bulb, ok := findBulb(bulbs, label)
 		if !ok {
 			continue
 		}
@@ -124,24 +122,24 @@ func publishBulbStates(config *Config, broker catbus.Client, bulbs *sync.Map) {
 		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 		state, err := bulb.State(ctx)
 		if err != nil {
-			log.Printf("%v: failed to read bulb state: %v", light.BulbLabel, err)
+			log.Printf("%v: failed to read bulb state: %v", label, err)
 			continue
 		}
 
-		if err := broker.Publish(light.TopicPower, catbus.Retain, state.Power.String()); err != nil {
-			log.Printf("%v: could not publish power: %v", light.BulbLabel, err)
+		if err := broker.Publish(bulbConfig.Topics.Power, catbus.Retain, state.Power.String()); err != nil {
+			log.Printf("%v: could not publish power: %v", label, err)
 		}
-		if err := broker.Publish(light.TopicHue, catbus.Retain, strconv.Itoa(state.Color.Hue)); err != nil {
-			log.Printf("%v: could not publish hue: %v", light.BulbLabel, err)
+		if err := broker.Publish(bulbConfig.Topics.Hue, catbus.Retain, strconv.Itoa(state.Color.Hue)); err != nil {
+			log.Printf("%v: could not publish hue: %v", label, err)
 		}
-		if err := broker.Publish(light.TopicSaturation, catbus.Retain, strconv.Itoa(state.Color.Saturation)); err != nil {
-			log.Printf("%v: could not publish saturation: %v", light.BulbLabel, err)
+		if err := broker.Publish(bulbConfig.Topics.Saturation, catbus.Retain, strconv.Itoa(state.Color.Saturation)); err != nil {
+			log.Printf("%v: could not publish saturation: %v", label, err)
 		}
-		if err := broker.Publish(light.TopicBrightness, catbus.Retain, strconv.Itoa(state.Color.Brightness)); err != nil {
-			log.Printf("%v: could not publish brightness: %v", light.BulbLabel, err)
+		if err := broker.Publish(bulbConfig.Topics.Brightness, catbus.Retain, strconv.Itoa(state.Color.Brightness)); err != nil {
+			log.Printf("%v: could not publish brightness: %v", label, err)
 		}
-		if err := broker.Publish(light.TopicKelvin, catbus.Retain, strconv.Itoa(state.Color.Kelvin)); err != nil {
-			log.Printf("%v: could not publish kelvin: %v", light.BulbLabel, err)
+		if err := broker.Publish(bulbConfig.Topics.Kelvin, catbus.Retain, strconv.Itoa(state.Color.Kelvin)); err != nil {
+			log.Printf("%v: could not publish kelvin: %v", label, err)
 		}
 	}
 }
