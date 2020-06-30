@@ -7,6 +7,6 @@ module go.eth.moe/catbus-lifx
 go 1.13
 
 require (
-	go.eth.moe/catbus v0.0.5
+	go.eth.moe/catbus v0.0.6
 	go.eth.moe/flag v0.0.1
 )
