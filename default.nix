@@ -10,7 +10,7 @@ buildGoModule rec {
   version = "latest";
   goPackagePath = "go.eth.moe/catbus-lifx";
 
-  modSha256 = "0ixrjc9m2g2129n1z73ybhiiz7b40fsa7w24w5bnspd3x4wsyr7z";
+  modSha256 = "1hrx6m8bcmw43vcm0h9s0pinsb0gxwzv6w5jh3rvs83mkl4m7fii";
 
   src = ./.;
 
