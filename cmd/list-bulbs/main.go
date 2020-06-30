@@ -18,18 +18,15 @@ import (
 )
 
 var (
-	timeout = flag.String("timeout", "10s", "how long to wait for bulbs to respond")
+	timeout = flag.Duration("timeout", 10*time.Second, "how long to wait for bulbs to respond")
 )
 
 func main() {
 	flag.Parse()
 
-	d, err := time.ParseDuration(*timeout)
-	if err != nil {
-		log.Fatalf("invalid duration %q for --timeout: %v", *timeout, err)
-	}
+	timeout := *timeout
 
-	ctx, _ := context.WithTimeout(context.Background(), d)
+	ctx, _ := context.WithTimeout(context.Background(), timeout)
 	bulbs, err := lifx.Discover(ctx)
 	if err != nil {
 		log.Fatalf("failed to discover bulbs: %v", err)
@@ -37,7 +34,7 @@ func main() {
 
 	var stats []string
 	for bulb := range bulbs {
-		ctx, _ := context.WithTimeout(context.Background(), d)
+		ctx, _ := context.WithTimeout(context.Background(), timeout)
 		state, err := bulb.State(ctx)
 		if err != nil {
 			log.Printf("a bulb was discovered but we failed to query it: %v", err)
