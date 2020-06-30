@@ -7,13 +7,14 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"strconv"
 	"sync"
 	"time"
 
+	"go.eth.moe/catbus"
 	"go.eth.moe/catbus-lifx/lifx"
-	"go.eth.moe/catbus-lifx/mqtt"
 )
 
 var (
@@ -41,28 +42,34 @@ func main() {
 		}
 	}(time.Tick(5 * time.Minute))
 
-	brokerURI := mqtt.URI(config.BrokerHost, config.BrokerPort)
-	brokerOptions := mqtt.NewClientOptions()
-	brokerOptions.AddBroker(brokerURI)
-	brokerOptions.SetAutoReconnect(true)
-	brokerOptions.SetConnectionLostHandler(func(_ mqtt.Client, err error) {
-		log.Printf("disconnected from MQTT broker %s: %v", brokerURI, err)
-	})
-	brokerOptions.SetOnConnectHandler(func(broker mqtt.Client) {
-		log.Printf("connected to MQTT broker %s", brokerURI)
+	brokerURI := fmt.Sprintf("tcp://%v:%v", config.BrokerHost, config.BrokerPort)
 
-		for _, light := range config.Lights {
-			broker.Subscribe(light.TopicPower, mqtt.AtLeastOnce, setPower(&bulbs, light.BulbLabel))
-			broker.Subscribe(light.TopicHue, mqtt.AtLeastOnce, setHue(&bulbs, light.BulbLabel))
-			broker.Subscribe(light.TopicSaturation, mqtt.AtLeastOnce, setSaturation(&bulbs, light.BulbLabel))
-			broker.Subscribe(light.TopicBrightness, mqtt.AtLeastOnce, setBrightness(&bulbs, light.BulbLabel))
-			broker.Subscribe(light.TopicKelvin, mqtt.AtLeastOnce, setKelvin(&bulbs, light.BulbLabel))
-		}
-	})
+	broker := catbus.NewClient(brokerURI, catbus.ClientOptions{
+		ConnectHandler: func(broker catbus.Client) {
+			log.Printf("connected to MQTT broker %s", brokerURI)
 
-	log.Printf("connecting to MQTT broker %v", brokerURI)
-	broker := mqtt.NewClient(brokerOptions)
-	_ = broker.Connect()
+			for _, light := range config.Lights {
+				if err := broker.Subscribe(light.TopicPower, setPower(&bulbs, light.BulbLabel)); err != nil {
+					log.Printf("could not subscribe to power: %v", err)
+				}
+				if err := broker.Subscribe(light.TopicHue, setHue(&bulbs, light.BulbLabel)); err != nil {
+					log.Printf("could not subscribe to hue: %v", err)
+				}
+				if err := broker.Subscribe(light.TopicSaturation, setSaturation(&bulbs, light.BulbLabel)); err != nil {
+					log.Printf("could not subscribe to saturation: %v", err)
+				}
+				if err := broker.Subscribe(light.TopicBrightness, setBrightness(&bulbs, light.BulbLabel)); err != nil {
+					log.Printf("could not subscribe to brightness: %v", err)
+				}
+				if err := broker.Subscribe(light.TopicKelvin, setKelvin(&bulbs, light.BulbLabel)); err != nil {
+					log.Printf("could not subscribe to kelvin: %v", err)
+				}
+			}
+		},
+		DisconnectHandler: func(_ catbus.Client, err error) {
+			log.Printf("disconnected from MQTT broker %s: %v", brokerURI, err)
+		},
+	})
 
 	go publishBulbStates(config, broker, &bulbs)
 	go func(c <-chan time.Time) {
@@ -71,8 +78,10 @@ func main() {
 		}
 	}(time.Tick(30 * time.Second))
 
-	// block forever.
-	select {}
+	log.Printf("connecting to MQTT broker %v", brokerURI)
+	if err := broker.Connect(); err != nil {
+		log.Fatalf("could not connect to MQTT broker: %v", err)
+	}
 }
 
 func findBulb(bulbs *sync.Map, label string) (lifx.Bulb, bool) {
@@ -105,7 +114,7 @@ func discoverBulbs(bulbs *sync.Map) {
 	}
 }
 
-func publishBulbStates(config *Config, broker mqtt.Client, bulbs *sync.Map) {
+func publishBulbStates(config *Config, broker catbus.Client, bulbs *sync.Map) {
 	for _, light := range config.Lights {
 		bulb, ok := findBulb(bulbs, light.BulbLabel)
 		if !ok {
@@ -119,11 +128,21 @@ func publishBulbStates(config *Config, broker mqtt.Client, bulbs *sync.Map) {
 			continue
 		}
 
-		broker.Publish(light.TopicPower, mqtt.AtLeastOnce, mqtt.Retain, state.Power.String())
-		broker.Publish(light.TopicHue, mqtt.AtLeastOnce, mqtt.Retain, strconv.Itoa(state.Color.Hue))
-		broker.Publish(light.TopicSaturation, mqtt.AtLeastOnce, mqtt.Retain, strconv.Itoa(state.Color.Saturation))
-		broker.Publish(light.TopicBrightness, mqtt.AtLeastOnce, mqtt.Retain, strconv.Itoa(state.Color.Brightness))
-		broker.Publish(light.TopicKelvin, mqtt.AtLeastOnce, mqtt.Retain, strconv.Itoa(state.Color.Kelvin))
+		if err := broker.Publish(light.TopicPower, catbus.Retain, state.Power.String()); err != nil {
+			log.Printf("%v: could not publish power: %v", light.BulbLabel, err)
+		}
+		if err := broker.Publish(light.TopicHue, catbus.Retain, strconv.Itoa(state.Color.Hue)); err != nil {
+			log.Printf("%v: could not publish hue: %v", light.BulbLabel, err)
+		}
+		if err := broker.Publish(light.TopicSaturation, catbus.Retain, strconv.Itoa(state.Color.Saturation)); err != nil {
+			log.Printf("%v: could not publish saturation: %v", light.BulbLabel, err)
+		}
+		if err := broker.Publish(light.TopicBrightness, catbus.Retain, strconv.Itoa(state.Color.Brightness)); err != nil {
+			log.Printf("%v: could not publish brightness: %v", light.BulbLabel, err)
+		}
+		if err := broker.Publish(light.TopicKelvin, catbus.Retain, strconv.Itoa(state.Color.Kelvin)); err != nil {
+			log.Printf("%v: could not publish kelvin: %v", light.BulbLabel, err)
+		}
 	}
 }
 
@@ -132,15 +151,15 @@ func parseNumber(raw string) (int, error) {
 	return int(float), err
 }
 
-func setPower(bulbs *sync.Map, label string) mqtt.MessageHandler {
-	return func(_ mqtt.Client, msg mqtt.Message) {
+func setPower(bulbs *sync.Map, label string) catbus.MessageHandler {
+	return func(_ catbus.Client, msg catbus.Message) {
 		bulb, ok := findBulb(bulbs, label)
 		if !ok {
 			return
 		}
 
 		var power lifx.Power
-		switch string(msg.Payload()) {
+		switch msg.Payload {
 		case "on":
 			power = lifx.On
 		case "off":
@@ -155,14 +174,14 @@ func setPower(bulbs *sync.Map, label string) mqtt.MessageHandler {
 		}
 	}
 }
-func setHue(bulbs *sync.Map, label string) mqtt.MessageHandler {
-	return func(_ mqtt.Client, msg mqtt.Message) {
+func setHue(bulbs *sync.Map, label string) catbus.MessageHandler {
+	return func(_ catbus.Client, msg catbus.Message) {
 		bulb, ok := findBulb(bulbs, label)
 		if !ok {
 			return
 		}
 
-		hue, err := parseNumber(string(msg.Payload()))
+		hue, err := parseNumber(msg.Payload)
 		if err != nil {
 			return
 		}
@@ -188,14 +207,14 @@ func setHue(bulbs *sync.Map, label string) mqtt.MessageHandler {
 		}
 	}
 }
-func setSaturation(bulbs *sync.Map, label string) mqtt.MessageHandler {
-	return func(_ mqtt.Client, msg mqtt.Message) {
+func setSaturation(bulbs *sync.Map, label string) catbus.MessageHandler {
+	return func(_ catbus.Client, msg catbus.Message) {
 		bulb, ok := findBulb(bulbs, label)
 		if !ok {
 			return
 		}
 
-		saturation, err := parseNumber(string(msg.Payload()))
+		saturation, err := parseNumber(msg.Payload)
 		if err != nil {
 			return
 		}
@@ -221,14 +240,14 @@ func setSaturation(bulbs *sync.Map, label string) mqtt.MessageHandler {
 		}
 	}
 }
-func setBrightness(bulbs *sync.Map, label string) mqtt.MessageHandler {
-	return func(_ mqtt.Client, msg mqtt.Message) {
+func setBrightness(bulbs *sync.Map, label string) catbus.MessageHandler {
+	return func(_ catbus.Client, msg catbus.Message) {
 		bulb, ok := findBulb(bulbs, label)
 		if !ok {
 			return
 		}
 
-		brightness, err := parseNumber(string(msg.Payload()))
+		brightness, err := parseNumber(msg.Payload)
 		if err != nil {
 			return
 		}
@@ -254,14 +273,14 @@ func setBrightness(bulbs *sync.Map, label string) mqtt.MessageHandler {
 		}
 	}
 }
-func setKelvin(bulbs *sync.Map, label string) mqtt.MessageHandler {
-	return func(_ mqtt.Client, msg mqtt.Message) {
+func setKelvin(bulbs *sync.Map, label string) catbus.MessageHandler {
+	return func(_ catbus.Client, msg catbus.Message) {
 		bulb, ok := findBulb(bulbs, label)
 		if !ok {
 			return
 		}
 
-		kelvin, err := parseNumber(string(msg.Payload()))
+		kelvin, err := parseNumber(msg.Payload)
 		if err != nil {
 			return
 		}
