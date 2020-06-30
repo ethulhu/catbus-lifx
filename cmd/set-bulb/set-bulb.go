@@ -11,7 +11,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/ethulhu/catbus-lifx/lifx"
+	"go.eth.moe/catbus-lifx/lifx"
 )
 
 var (

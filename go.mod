@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-module github.com/ethulhu/catbus-lifx
+module go.eth.moe/catbus-lifx
 
 go 1.13
 

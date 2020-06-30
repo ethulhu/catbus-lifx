@@ -8,7 +8,7 @@ with pkgs;
 buildGoModule rec {
   name = "catbus-lifx-${version}";
   version = "latest";
-  goPackagePath = "github.com/ethulhu/catbus-lifx";
+  goPackagePath = "go.eth.moe/catbus-lifx";
 
   modSha256 = "1vc1sq6rhs2s1fa50vq4475qiixy2nd8npcsy76l4pkkxlibj25h";
 

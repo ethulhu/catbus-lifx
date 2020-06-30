@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethulhu/catbus-lifx/lifx"
-	"github.com/ethulhu/catbus-lifx/mqtt"
+	"go.eth.moe/catbus-lifx/lifx"
+	"go.eth.moe/catbus-lifx/mqtt"
 )
 
 var (
