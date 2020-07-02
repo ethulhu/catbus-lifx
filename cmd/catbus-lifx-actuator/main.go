@@ -7,7 +7,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"strconv"
 	"sync"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"go.eth.moe/catbus-lifx/config"
 	"go.eth.moe/catbus-lifx/lifx"
 	"go.eth.moe/flag"
+	"go.eth.moe/logger"
 )
 
 var (
@@ -32,9 +32,12 @@ func main() {
 
 	configPath := (*configPath).(string)
 
+	log := logger.Background()
+
 	config, err := config.ParseFile(configPath)
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		log.AddField("config-path", configPath)
+		log.WithError(err).Fatal("could not load config")
 	}
 
 	go discoverBulbs()
@@ -46,56 +49,75 @@ func main() {
 
 	broker := catbus.NewClient(config.BrokerURI, catbus.ClientOptions{
 		ConnectHandler: func(broker catbus.Client) {
-			log.Printf("connected to MQTT broker %v", config.BrokerURI)
+			log := logger.Background()
+			log.AddField("broker-uri", config.BrokerURI)
+			log.Info("connected to MQTT broker")
 
 			for label, bulb := range config.BulbsByLabel {
 				if err := broker.Subscribe(bulb.Topics.Power, setPower(label)); err != nil {
-					log.Printf("could not subscribe to power: %v", err)
+					log := log.WithError(err)
+					log.AddField("topic", bulb.Topics.Power)
+					log.Error("could not subscribe to power")
 				}
 				if err := broker.Subscribe(bulb.Topics.Hue, setHue(label)); err != nil {
-					log.Printf("could not subscribe to hue: %v", err)
+					log := log.WithError(err)
+					log.AddField("topic", bulb.Topics.Hue)
+					log.Error("could not subscribe to hue")
 				}
 				if err := broker.Subscribe(bulb.Topics.Saturation, setSaturation(label)); err != nil {
-					log.Printf("could not subscribe to saturation: %v", err)
+					log := log.WithError(err)
+					log.AddField("topic", bulb.Topics.Saturation)
+					log.Error("could not subscribe to saturation")
 				}
 				if err := broker.Subscribe(bulb.Topics.Brightness, setBrightness(label)); err != nil {
-					log.Printf("could not subscribe to brightness: %v", err)
+					log := log.WithError(err)
+					log.AddField("topic", bulb.Topics.Brightness)
+					log.Error("could not subscribe to brightness")
 				}
 				if err := broker.Subscribe(bulb.Topics.Kelvin, setKelvin(label)); err != nil {
-					log.Printf("could not subscribe to kelvin: %v", err)
+					log := log.WithError(err)
+					log.AddField("topic", bulb.Topics.Kelvin)
+					log.Error("could not subscribe to kelvin")
 				}
 			}
+			log.Info("subscribed to all topics for all bulbs")
 		},
 		DisconnectHandler: func(_ catbus.Client, err error) {
-			log.Printf("disconnected from MQTT broker %v: %v", config.BrokerURI, err)
+			log := logger.Background()
+			log.AddField("broker-uri", config.BrokerURI)
+			log.Error("disconnected from MQTT broker")
 		},
 	})
 
-	log.Print("connecting to MQTT broker %v", config.BrokerURI)
+	log.AddField("broker-uri", config.BrokerURI)
+	log.Info("connecting to MQTT broker")
 	if err := broker.Connect(); err != nil {
-		log.Fatalf("could not connect to MQTT broker %v: %v", config.BrokerURI, err)
+		log.WithError(err).Fatal("could not connect to MQTT broker")
 	}
 }
 
 func discoverBulbs() {
-	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-	bulbs, err := lifx.Discover(ctx)
+	log, ctx := logger.FromContext(context.Background())
+
+	log.Info("discovering bulbs")
+	discoverCtx, _ := context.WithTimeout(ctx, 10*time.Second)
+	bulbs, err := lifx.Discover(discoverCtx)
 	if err != nil {
-		log.Printf("could not discover bulbs: %v", err)
+		log.WithError(err).Error("could not discover bulbs")
 		return
 	}
-	log.Print("found bulbs")
+	log.Info("found bulbs")
 
 	for bulb := range bulbs {
 		bulb := bulb
 		go func() {
-			ctx := context.Background()
 			state, err := bulb.State(ctx)
 			if err != nil {
-				log.Printf("could not read bulb state: %v", err)
+				log.WithError(err).Error("could not read bulb state")
 				return
 			}
-			log.Printf("found bulb: %v", state.Label)
+			log.AddField("bulb", state.Label)
+			log.Info("found bulb")
 
 			bulbsByLabelMu.Lock()
 			defer bulbsByLabelMu.Unlock()
@@ -117,9 +139,13 @@ func parseNumber(raw string) (int, error) {
 
 func setPower(label string) catbus.MessageHandler {
 	return func(_ catbus.Client, msg catbus.Message) {
+		log, ctx := logger.FromContext(context.Background())
+		log.AddField("bulb", label)
+		log.AddField("payload", msg.Payload)
+
 		bulb, ok := findBulb(label)
 		if !ok {
-			log.Printf("could not find bulb: %v", label)
+			log.Error("could not find bulb")
 			return
 		}
 
@@ -130,25 +156,33 @@ func setPower(label string) catbus.MessageHandler {
 		case "off":
 			power = lifx.Off
 		default:
+			log.Warning("invalid power state")
 			return
 		}
 
-		ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+		ctx, _ = context.WithTimeout(ctx, 2*time.Second)
 		if err := bulb.SetPower(ctx, power, 500*time.Millisecond); err != nil {
-			log.Printf("%s: failed to set power: %v", label, err)
+			log.WithError(err).Error("could not set power")
+			return
 		}
+		log.Info("set power")
 	}
 }
 func setHue(label string) catbus.MessageHandler {
 	return func(_ catbus.Client, msg catbus.Message) {
+		log, ctx := logger.FromContext(context.Background())
+		log.AddField("bulb", label)
+		log.AddField("payload", msg.Payload)
+
 		bulb, ok := findBulb(label)
 		if !ok {
-			log.Printf("could not find bulb: %v", label)
+			log.Error("could not find bulb")
 			return
 		}
 
 		hue, err := parseNumber(msg.Payload)
 		if err != nil {
+			log.Warning("invalid hue")
 			return
 		}
 		for hue < 0 {
@@ -157,11 +191,12 @@ func setHue(label string) catbus.MessageHandler {
 		if hue > 359 {
 			hue = hue % 360
 		}
+		log.AddField("hue", hue)
 
-		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, _ = context.WithTimeout(ctx, 5*time.Second)
 		state, err := bulb.State(ctx)
 		if err != nil {
-			log.Printf("%s: failed to get bulb state: %v", label, err)
+			log.WithError(err).Error("could not get bulb state")
 			return
 		}
 
@@ -169,20 +204,27 @@ func setHue(label string) catbus.MessageHandler {
 		color.Hue = hue
 
 		if err := bulb.SetColor(ctx, color, 100*time.Millisecond); err != nil {
-			log.Printf("%s: failed to set hue: %v", label, err)
+			log.WithError(err).Error("could not set hue")
+			return
 		}
+		log.Info("set hue")
 	}
 }
 func setSaturation(label string) catbus.MessageHandler {
 	return func(_ catbus.Client, msg catbus.Message) {
+		log, ctx := logger.FromContext(context.Background())
+		log.AddField("bulb", label)
+		log.AddField("payload", msg.Payload)
+
 		bulb, ok := findBulb(label)
 		if !ok {
-			log.Printf("could not find bulb: %v", label)
+			log.Error("could not find bulb")
 			return
 		}
 
 		saturation, err := parseNumber(msg.Payload)
 		if err != nil {
+			log.Warning("invalid saturation")
 			return
 		}
 		if saturation < 0 {
@@ -191,11 +233,12 @@ func setSaturation(label string) catbus.MessageHandler {
 		if saturation > 100 {
 			saturation = 100
 		}
+		log.AddField("saturation", saturation)
 
-		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, _ = context.WithTimeout(ctx, 5*time.Second)
 		state, err := bulb.State(ctx)
 		if err != nil {
-			log.Printf("%s: failed to get bulb state: %v", label, err)
+			log.WithError(err).Error("could not get bulb state")
 			return
 		}
 
@@ -203,20 +246,27 @@ func setSaturation(label string) catbus.MessageHandler {
 		color.Saturation = saturation
 
 		if err := bulb.SetColor(ctx, color, 100*time.Millisecond); err != nil {
-			log.Printf("%s: failed to set saturation: %v", label, err)
+			log.WithError(err).Error("could not set saturation")
+			return
 		}
+		log.Info("set saturation")
 	}
 }
 func setBrightness(label string) catbus.MessageHandler {
 	return func(_ catbus.Client, msg catbus.Message) {
+		log, ctx := logger.FromContext(context.Background())
+		log.AddField("bulb", label)
+		log.AddField("payload", msg.Payload)
+
 		bulb, ok := findBulb(label)
 		if !ok {
-			log.Printf("could not find bulb: %v", label)
+			log.Error("could not find bulb")
 			return
 		}
 
 		brightness, err := parseNumber(msg.Payload)
 		if err != nil {
+			log.Warning("invalid brightness")
 			return
 		}
 		if brightness < 0 {
@@ -225,11 +275,12 @@ func setBrightness(label string) catbus.MessageHandler {
 		if brightness > 100 {
 			brightness = 100
 		}
+		log.AddField("brightness", brightness)
 
-		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, _ = context.WithTimeout(ctx, 5*time.Second)
 		state, err := bulb.State(ctx)
 		if err != nil {
-			log.Printf("%s: failed to get bulb state: %v", label, err)
+			log.WithError(err).Error("could not get bulb state")
 			return
 		}
 
@@ -237,20 +288,27 @@ func setBrightness(label string) catbus.MessageHandler {
 		color.Brightness = brightness
 
 		if err := bulb.SetColor(ctx, color, 100*time.Millisecond); err != nil {
-			log.Printf("%s: failed to set brightness: %v", label, err)
+			log.WithError(err).Error("could not set brightness")
+			return
 		}
+		log.Info("set brightness")
 	}
 }
 func setKelvin(label string) catbus.MessageHandler {
 	return func(_ catbus.Client, msg catbus.Message) {
+		log, ctx := logger.FromContext(context.Background())
+		log.AddField("bulb", label)
+		log.AddField("payload", msg.Payload)
+
 		bulb, ok := findBulb(label)
 		if !ok {
-			log.Printf("could not find bulb: %v", label)
+			log.Error("could not find bulb")
 			return
 		}
 
 		kelvin, err := parseNumber(msg.Payload)
 		if err != nil {
+			log.Warning("invalid kelvin")
 			return
 		}
 		if kelvin < 2500 {
@@ -259,11 +317,12 @@ func setKelvin(label string) catbus.MessageHandler {
 		if kelvin > 9000 {
 			kelvin = 9000
 		}
+		log.AddField("kelvin", kelvin)
 
-		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, _ = context.WithTimeout(ctx, 5*time.Second)
 		state, err := bulb.State(ctx)
 		if err != nil {
-			log.Printf("%s: failed to get bulb state: %v", label, err)
+			log.WithError(err).Error("could not get bulb state")
 			return
 		}
 
@@ -271,7 +330,9 @@ func setKelvin(label string) catbus.MessageHandler {
 		color.Kelvin = kelvin
 
 		if err := bulb.SetColor(ctx, color, 100*time.Millisecond); err != nil {
-			log.Printf("%s: failed to set Kelvin: %v", label, err)
+			log.WithError(err).Error("could not set kelvin")
+			return
 		}
+		log.Info("set kelvin")
 	}
 }
