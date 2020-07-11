@@ -29,7 +29,7 @@ func main() {
 	ctx, _ := context.WithTimeout(context.Background(), timeout)
 	bulbs, err := lifx.Discover(ctx)
 	if err != nil {
-		log.Fatalf("failed to discover bulbs: %v", err)
+		log.Fatalf("could not discover bulbs: %v", err)
 	}
 
 	var stats []string
@@ -37,7 +37,7 @@ func main() {
 		ctx, _ := context.WithTimeout(context.Background(), timeout)
 		state, err := bulb.State(ctx)
 		if err != nil {
-			log.Printf("a bulb was discovered but we failed to query it: %v", err)
+			log.Printf("a bulb was discovered but we could not query it: %v", err)
 			continue
 		}
 

@@ -92,7 +92,7 @@ func (b *bulb) sendAndReceive(ctx context.Context, message interface{}) (interfa
 	}
 
 	if _, err := conn.Write(packet); err != nil {
-		return nil, fmt.Errorf("failed to send packet on UDP: %w", err)
+		return nil, fmt.Errorf("could not send packet: %w", err)
 	}
 
 	buf := make([]byte, 256)
@@ -102,7 +102,7 @@ func (b *bulb) sendAndReceive(ctx context.Context, message interface{}) (interfa
 		if errors.As(err, &netError) && netError.Timeout() {
 			return nil, ErrNoResponse
 		}
-		return nil, fmt.Errorf("failed to read from UDP: %w", err)
+		return nil, fmt.Errorf("could not read packet: %w", err)
 	}
 
 	hdr = &header{}

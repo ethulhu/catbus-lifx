@@ -28,7 +28,7 @@ func main() {
 
 	config, err := config.ParseFile(configPath)
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		log.Fatalf("could not load config: %v", err)
 	}
 
 	broker := catbus.NewClient(config.BrokerURI, catbus.ClientOptions{

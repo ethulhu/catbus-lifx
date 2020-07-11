@@ -41,7 +41,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	bulbs, err := lifx.Discover(ctx)
 	if err != nil {
-		log.Fatalf("failed to discover bulbs: %v", err)
+		log.Fatalf("could not discover bulbs: %v", err)
 	}
 
 	var bulb lifx.Bulb
@@ -83,30 +83,30 @@ func main() {
 	if colorChange && *power == "on" {
 		ctx, _ = context.WithTimeout(context.Background(), *timeout)
 		if err := bulb.SetColor(ctx, color, 0); err != nil {
-			log.Fatalf("failed to set color: %v", err)
+			log.Fatalf("could not set color: %v", err)
 		}
 		ctx, _ = context.WithTimeout(context.Background(), *timeout)
 		if err := bulb.SetPower(ctx, lifx.On, *duration); err != nil {
-			log.Fatalf("failed to set power: %v", err)
+			log.Fatalf("could not set power: %v", err)
 		}
 	} else {
 		if *power == "on" {
 			ctx, _ = context.WithTimeout(context.Background(), *timeout)
 			if err := bulb.SetPower(ctx, lifx.On, *duration); err != nil {
-				log.Fatalf("failed to set power: %v", err)
+				log.Fatalf("could not set power: %v", err)
 			}
 		}
 		if *power == "off" {
 			ctx, _ = context.WithTimeout(context.Background(), *timeout)
 			if err := bulb.SetPower(ctx, lifx.Off, *duration); err != nil {
-				log.Fatalf("failed to set power: %v", err)
+				log.Fatalf("could not set power: %v", err)
 			}
 		}
 
 		if colorChange {
 			ctx, _ = context.WithTimeout(context.Background(), *timeout)
 			if err := bulb.SetColor(ctx, color, *duration); err != nil {
-				log.Fatalf("failed to set color: %v", err)
+				log.Fatalf("could not set color: %v", err)
 			}
 		}
 	}

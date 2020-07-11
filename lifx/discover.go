@@ -29,7 +29,7 @@ func Discover(ctx context.Context) (<-chan Bulb, error) {
 
 	conn, err := net.ListenUDP("udp", nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to listen on UDP: %w", err)
+		return nil, fmt.Errorf("could not listen on UDP: %w", err)
 	}
 	if deadline, ok := ctx.Deadline(); ok {
 		conn.SetDeadline(deadline)
@@ -37,7 +37,7 @@ func Discover(ctx context.Context) (<-chan Bulb, error) {
 
 	if _, err := conn.WriteTo(packet, broadcastAddr); err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("failed to send packet on UDP: %w", err)
+		return nil, fmt.Errorf("could not send discover packet: %w", err)
 	}
 
 	bulbs := make(chan Bulb)
