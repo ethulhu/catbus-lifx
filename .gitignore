@@ -4,5 +4,7 @@
 
 /catbus-lifx-actuator
 /catbus-lifx-observer
+/list-bulbs
 /result
+/set-bulb
 config.json
