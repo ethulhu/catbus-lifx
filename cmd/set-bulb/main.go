@@ -46,7 +46,7 @@ func main() {
 
 	var bulb lifx.Bulb
 	var state lifx.State
-	for b := range bulbs {
+	for _, b := range bulbs {
 		ctx, _ := context.WithTimeout(context.Background(), *timeout)
 		s, err := b.State(ctx)
 		if err != nil {

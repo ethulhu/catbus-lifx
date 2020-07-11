@@ -33,7 +33,7 @@ func main() {
 	}
 
 	var stats []string
-	for bulb := range bulbs {
+	for _, bulb := range bulbs {
 		ctx, _ := context.WithTimeout(context.Background(), timeout)
 		state, err := bulb.State(ctx)
 		if err != nil {

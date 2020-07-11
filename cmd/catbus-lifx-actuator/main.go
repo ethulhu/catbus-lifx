@@ -108,7 +108,7 @@ func discoverBulbs() {
 	}
 	log.Info("found bulbs")
 
-	for bulb := range bulbs {
+	for _, bulb := range bulbs {
 		bulb := bulb
 		go func() {
 			state, err := bulb.State(ctx)

@@ -62,7 +62,7 @@ func publishBulbStates(config *config.Config, broker catbus.Client) {
 	}
 	log.Print("found bulbs")
 
-	for bulb := range bulbs {
+	for _, bulb := range bulbs {
 		ctx := context.Background()
 		state, err := bulb.State(ctx)
 		if err != nil {
