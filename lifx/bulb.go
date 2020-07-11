@@ -80,10 +80,9 @@ func (b *bulb) sendAndReceive(ctx context.Context, message interface{}) (interfa
 	}
 	packet := append(hdr.Bytes(), payload.Bytes()...)
 
-	// TODO: provide a proper listenAddr.
-	conn, err := net.ListenUDP("udp", nil)
+	conn, err := net.Dial(b.addr.Network(), b.addr.String())
 	if err != nil {
-		return nil, fmt.Errorf("failed to listen on UDP: %w", err)
+		return nil, fmt.Errorf("could not dial bulb: %w", err)
 	}
 	defer conn.Close()
 
@@ -92,12 +91,12 @@ func (b *bulb) sendAndReceive(ctx context.Context, message interface{}) (interfa
 		conn.SetDeadline(deadline)
 	}
 
-	if _, err := conn.WriteTo(packet, b.addr); err != nil {
+	if _, err := conn.Write(packet); err != nil {
 		return nil, fmt.Errorf("failed to send packet on UDP: %w", err)
 	}
 
 	buf := make([]byte, 256)
-	n, _, err := conn.ReadFromUDP(buf)
+	n, err := conn.Read(buf)
 	if err != nil {
 		var netError net.Error
 		if errors.As(err, &netError) && netError.Timeout() {
