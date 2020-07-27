@@ -106,8 +106,9 @@ func discoverBulbs() {
 		log.WithError(err).Error("could not discover bulbs")
 		return
 	}
-	log.Info("found bulbs")
+	log.Info("discovered bulbs")
 
+	ctx, _ = context.WithTimeout(ctx, 5*time.Second)
 	for _, bulb := range bulbs {
 		bulb := bulb
 		go func() {
