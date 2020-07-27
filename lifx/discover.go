@@ -32,10 +32,11 @@ func Discover(ctx context.Context) ([]Bulb, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not listen on UDP: %w", err)
 	}
+	defer conn.Close()
+
 	if deadline, ok := ctx.Deadline(); ok {
 		conn.SetDeadline(deadline)
 	}
-	defer conn.Close()
 
 	if _, err := conn.WriteTo(packet, broadcastAddr); err != nil {
 		return nil, fmt.Errorf("could not send discover packet: %w", err)
